@@ -1,7 +1,7 @@
 ---
 subtitle: "MA8701 Advanced Statistical Learning V2023"
 title: "Compulsory exercise: Team Supergreat"
-author: "Nora Aasen, Elias Angelsen, Jonas Nordstrøm"
+author: "Nora Aasen, Elias Angelsen, Jonas Nordstr?m"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
   html_document
