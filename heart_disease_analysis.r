@@ -10,6 +10,18 @@ md.pattern(data)
 
 gg_miss_var(data)
 
-data_complete <- data[complete.cases(data), ]
+df_complete <- data[complete.cases(data), ]
 
-dim(data_complete)
+dim(df_complete)
+
+
+
+# Should we code the binary responses to be categorical instead of integers? 
+# Education should be categorical
+
+# Fit a logistic model
+
+mod0 <- glm(TenYearCHD ~ ., data = df_complete, family = binomial())
+
+
+summary(mod0)
