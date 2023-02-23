@@ -23,6 +23,7 @@ knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.wh
 library(naniar)
 library(mice)
 library(glmnet)
+library(dplyr)
 ```
 
 ## Exploratory Analysis
@@ -51,3 +52,24 @@ mod0 <- glm(TenYearCHD ~ ., data = df_complete, family = binomial())
 
 summary(mod0)
 ```
+
+## Ridge 
+```{r Ridge Model}
+col_names <- colnames(df_complete)
+predictors <- col_names[!col_names == "education"]
+
+df_sub <- df_complete[, predictors]
+
+sapply(df_sub, class)
+
+X <- df_complete[, !names(df_complete) %in% c("TenYearCHD")]
+y <- df_complete["TenYearCHD"]
+
+X["education"] <- factor(X$education, labels = c("None","Highschool", "Collage", "Grad"))
+
+mod_ridge <- glmnet(X, y, family = "binomial")
+
+summary(mod_ridge)
+glmnet
+```
+
