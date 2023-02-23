@@ -24,6 +24,8 @@ library(naniar)
 library(mice)
 library(glmnet)
 library(dplyr)
+library(mltools)
+library(data.table)
 ```
 
 ## Exploratory Analysis
@@ -55,21 +57,17 @@ summary(mod0)
 
 ## Ridge 
 ```{r Ridge Model}
-col_names <- colnames(df_complete)
-predictors <- col_names[!col_names == "education"]
+response <- "TenYearCHD"
+features <- names(df_complete)[!names(df_complete) %in% c("TenYearCHD")]
 
-df_sub <- df_complete[, predictors]
+df_complete["education"] <- factor(df_complete$education, labels = c("None", "HighSchool", "Collage", "Grad"))
 
-sapply(df_sub, class)
+X <- model.matrix(~.-1, df_complete[features])
+y <- df_complete$response
 
-X <- df_complete[, !names(df_complete) %in% c("TenYearCHD")]
-y <- df_complete["TenYearCHD"]
+fit_ridge <- cv.glmnet(X_mat, y, family = "binomial", alpha = 0)
 
-X["education"] <- factor(X$education, labels = c("None","Highschool", "Collage", "Grad"))
+plot(fit_ridge)
 
-mod_ridge <- glmnet(X, y, family = "binomial")
-
-summary(mod_ridge)
-glmnet
 ```
 
