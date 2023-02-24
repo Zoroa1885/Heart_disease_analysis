@@ -24,8 +24,7 @@ library(naniar)
 library(mice)
 library(glmnet)
 library(dplyr)
-library(mltools)
-library(data.table)
+library(caret)
 ```
 
 ## Exploratory Analysis
@@ -63,11 +62,42 @@ features <- names(df_complete)[!names(df_complete) %in% c("TenYearCHD")]
 df_complete["education"] <- factor(df_complete$education, labels = c("None", "HighSchool", "Collage", "Grad"))
 
 X <- model.matrix(~.-1, df_complete[features])
-y <- df_complete$response
+y <- df_complete[response]
 
-fit_ridge <- cv.glmnet(X_mat, y, family = "binomial", alpha = 0)
+train_frac = 0.8
+train.ind <- sample(c(TRUE, FALSE), nrow(df_complete),
+                    replace=TRUE, prob=c(train_frac, 1-train_frac))
 
-plot(fit_ridge)
+X_train <- X[train.ind,]
+X_test <- X[!train.ind,]
 
+y_train <- y[train.ind,]
+y_test <- y[!train.ind,]
+
+ridge_cv <- cv.glmnet(X_train, y_train, family = "binomial", alpha = 0)
+
+plot(ridge_cv)
+lambda_min = ridge_cv$lambda.min
+lambda_1se = ridge_cv$lambda.1se
+cat("Lambda min:", lambda_min, "\n")
+cat("Lambda 1se:", lambda_1se)
+
+
+print(ridge_cv)
+coef(ridge_cv, s = "lambda.1se")
+```
+Make a fit with the best lambda and measuring error
+```{r}
+ridge_fit = glmnet(X_train, y_train, lambda = lambda_min, alpha = 0, family = "binomial")
+ridge_pred = predict(ridge_fit, X_test, type = "class")
+
+ridge_pred_class = factor(round(ridge_pred))
+y_test <- factor(y_test)
+
+conf_mat <- confusionMatrix(ridge_pred_class, y_test)
+conf_mat
+
+mse_ridge = mean((ridge_pred - y_test)^2)
+mse_ridge
 ```
 
