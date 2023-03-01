@@ -25,24 +25,67 @@ library(mice)
 library(glmnet)
 library(dplyr)
 library(caret)
+library(ggcorrplot)
 ```
+
+Plan for the project: 
+\begin{itemize}
+\item Start by fitting lasso in bootstrap using complete data
+\item Then singular imputation in training set and use same in test set
+\item Fit a lasso within bootstrap
+\item New method: still fitting lasso but this time do single imputation within the bootstrap
+\item Compare the three different methods
+\item Fit logistic regression and do inference under glm assumptions
+\end{itemize}
 
 ## Exploratory Analysis
 ```{r Loading Data}
 # Load and look at data
 data <- read.csv("framingham.csv")
+dim(data)
+sum(data$TenYearCHD==1)
 head(data)
+str(data)
+
+# Code education as a factor variable instead
+data$education = factor(data$education, labels = c("none","hs","college","post-grad"))
+
+# Look at the missing data
 md.pattern(data)
 gg_miss_var(data)
 
 # Make a dataset containing only the complete cases
 df_complete <- data[complete.cases(data), ]
 dim(df_complete)
-
+sum(df_complete$TenYearCHD==1)
+str(df_complete)
+# View(df_complete)
 # Should we code the binary responses to be categorical instead of integers? 
-# Education should be categorical
+
+
+# Split data into training and test
+r = dim(df_complete)[1]
+size = r-round(r/5)
+spl = sample(1:r,size = size)
+X = model.matrix(TenYearCHD ~  ., data = df_complete)[,-1]
+x.train = X[spl,]
+x.test = X[-spl,]
+y.train = df_complete$TenYearCHD[spl]
+y.test = df_complete$TenYearCHD[-spl]
+```
+
+```{r exp analysis}
+# Make a correlation plot 
+cor_mat = cor(df_complete)
+ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
+   outline.col = "white",
+   colors = c("blue", "white", "red"))
 ```
 ## Missing Data
+
+
+
+
 
 # Model
 
@@ -52,6 +95,47 @@ dim(df_complete)
 mod0 <- glm(TenYearCHD ~ ., data = df_complete, family = binomial())
 
 summary(mod0)
+```
+
+
+## Lasso
+```{r Lasso}
+# Må vi fjerne intercept før lasso? 
+
+# Use cross-validation to find lambda
+cv.out = cv.glmnet(x.train, y.train, family = "binomial", alpha = 1)
+plot(cv.out$glmnet.fit, "lambda", label=FALSE)
+plot(cv.out)
+cv.out$lambda.min
+cv.out$lambda.1se
+lasso_mod = glmnet(x.train, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+
+lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
+lasso_coef[,1]
+``` 
+
+
+
+
+```{r Bootstrap Lasso}
+B = 1000
+
+B_coef = matrix(NA, nrow = B, ncol = 16)
+for (i in 1:B){
+  print(i)
+  spl_b = sample(1:size, size = size, replace = TRUE)
+  x = x.train[spl_b,]
+  y = y.train[spl_b]
+  cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
+  lasso_mod = glmnet(x.train, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+
+  B_coef[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
+}
+
+colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
+B_coef = ifelse(B_coef == 0,0,1)
+apply(B_coef, 2, sum)
+
 ```
 
 ## Ridge 
