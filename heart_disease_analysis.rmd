@@ -42,6 +42,7 @@ Plan for the project:
 ## Exploratory Analysis
 ```{r Loading Data}
 # Load and look at data
+# data <- framingham # Just if manual import
 data <- read.csv("framingham.csv")
 dim(data)
 sum(data$TenYearCHD==1)
@@ -84,7 +85,180 @@ ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
 ```
 ## Missing Data
 
+To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference (as Rubins rules are not clear on how to treat Lasso/Ridge/elNet or something? Recall what Mette said )
 
+The single imputation technique we will use is simply to 
+
+```{r Missing Data}
+# Todo: 
+# Set seed
+# Split into training and test data
+# Train imputation model explicitly on training data
+# Predict values with the same model on the test data and use this as new test.
+
+# Setting seed expressing our love for MA8701
+set.seed(8701)
+
+
+
+#----------------------------------------------------------------
+### -------- Trying to just split, predict and go for it --------
+#----------------------------------------------------------------
+
+# Split into training and test data
+
+#Which should go where?
+dim_data = dim(data)[1]
+size_split = dim_data-round(dim_data/5)
+spl_dat = sample(1:dim_data, size = size_split)
+
+train_data = data[spl_dat,]
+test_data = data[-spl_dat,]
+
+# In CC, we did something like this, but I think modmat does not handle NA's, yielding out of bounds subscripts.
+              # X_dat = model.matrix(TenYearCHD ~  ., data = data)[,-1]           # Removes the intercept? Where did this come from?
+
+# This below here is a fixed version of the code, as we may want to predict using the covariates only, not the response.
+X_dat = data[,-dim(data)[2]] # Remove the column with response?
+x.train_dat = X_dat[spl_dat,]
+x.test_dat = X_dat[-spl_dat,]
+y.train_dat = data$TenYearCHD[spl_dat]
+y.test_dat = data$TenYearCHD[-spl_dat]
+
+
+
+#We fit a linear model on the training set.
+
+# QUESTION: Should the response (TenYearCHD) be included here?
+
+fit_for_simp_glucose <- lm(glucose ~., data = x.train_dat)
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_glucose)
+
+# Prediction 
+
+
+### ----------PRoblem though. We have 61 samples with more than one covariate missing. How do we make many such models? ---------
+        # ^ Can we just yeet them and work with 61 less samples? 
+          # We get indices that dont match up, ripp.
+
+#Predicting new glucose data.
+pred_glucose_train <- predict(fit_for_simp_glucose, newdata = ic(x.train_dat)) 
+pred_glucose_test <- predict(fit_for_simp_glucose, newdata = ic(x.test_dat)) #ic = incomplete cases   #ici = incomplete case indicator
+
+
+#--------------------------------------------------------------------------------------------------------
+# ---------------------- Removing all samples that have more than one covariate missing -----------------
+# ---------------------- and trying again, hopefully with better results --------------------------------
+#--------------------------------------------------------------------------------------------------------
+
+# Throwing out the samples with two or more NAs from the data
+miss <- c()
+for(i in 1:nrow(data)) {
+  if(sum(is.na(data[i,])) > 1){
+    miss <- append(miss,i)
+    }  
+}
+
+data2 <- data[-miss,]
+
+length(miss) # This number should be 61 if done correctly (61 came from manually counting)
+
+# Exploring data2
+
+md.pattern(data2)
+gg_miss_var(data2)
+
+
+
+# Split into training and test data
+
+#Which should go where?
+dim_data2 = dim(data2)[1]
+size_split2 = dim_data2-round(dim_data2/5)
+spl_dat2 = sample(1:dim_data2, size = size_split2)
+
+# Making training and test data
+train_data2 = data2[spl_dat2,]
+test_data2 = data2[-spl_dat2,]
+
+# Making training and test data for covariates and response separately.
+
+X_dat2 = data2[,-dim(data2)[2]] # Remove the column with response?
+x.train_dat2 = X_dat2[spl_dat2,]
+x.test_dat2 = X_dat2[-spl_dat2,]
+y.train_dat2 = data2$TenYearCHD[spl_dat2]
+y.test_dat2 = data2$TenYearCHD[-spl_dat2]
+
+
+## Predicting new glucose data.
+
+# We fit a linear model on the training set.
+
+fit_for_simp_glucose_2 <- lm(glucose ~., data = x.train_dat2) # Should we have included the response? Think not.
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_glucose_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_gluc_2 = ic(x.train_dat2)
+train_data_to_pred_gluc_2 = train_data_to_pred_gluc_2[ici(train_data_to_pred_gluc_2$glucose),]
+
+test_data_to_pred_gluc_2 = ic(x.test_dat2)
+test_data_to_pred_gluc_2 = test_data_to_pred_gluc_2[ici(test_data_to_pred_gluc_2$glucose),]
+
+
+# Predict them
+pred_glucose_train_2 <- predict(fit_for_simp_glucose_2, newdata = train_data_to_pred_gluc_2) 
+pred_glucose_test_2 <- predict(fit_for_simp_glucose2, newdata = test_data_to_pred_gluc_2)
+
+
+
+## Lets see what we predicted
+
+plot(train_data$glucose)
+plot(pred_glucose_train_2)
+
+# Make histogram objects
+
+hg_pred = hist(pred_glucose_train_2, plot = FALSE)
+hg_old = hist(train_data$glucose, plot = FALSE)
+
+
+# Make transparent colors
+c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
+c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
+
+# Plot together
+plot(hg_old, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred, , col = c2, add = TRUE)
+
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$glucose),]$glucose <- pred_glucose_train_2
+x.test_dat2[ici(x.test_dat2$glucose),]$glucose <- pred_glucose_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+
+
+# Can do this again for the other variables needed. Is this ok? 
+
+
+
+
+
+
+```
 
 
 
