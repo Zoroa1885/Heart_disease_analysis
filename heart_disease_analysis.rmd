@@ -27,6 +27,7 @@ library(dplyr)
 library(caret)
 library(ggcorrplot)
 library(ggplot2)
+library(e1071) #If we use KNN for imputation of education (multiclass)
 ```
 
 Plan for the project: 
@@ -89,18 +90,7 @@ To treat the missing data, we will use single imputation, as multiple imputation
 
 The single imputation technique we will use is simply to 
 
-```{r Missing Data}
-# Todo: 
-# Set seed
-# Split into training and test data
-# Train imputation model explicitly on training data
-# Predict values with the same model on the test data and use this as new test.
-
-# Setting seed expressing our love for MA8701
-set.seed(8701)
-
-
-
+```{r MD shit version}
 #----------------------------------------------------------------
 ### -------- Trying to just split, predict and go for it --------
 #----------------------------------------------------------------
@@ -147,6 +137,22 @@ summary(fit_for_simp_glucose)
 pred_glucose_train <- predict(fit_for_simp_glucose, newdata = ic(x.train_dat)) 
 pred_glucose_test <- predict(fit_for_simp_glucose, newdata = ic(x.test_dat)) #ic = incomplete cases   #ici = incomplete case indicator
 
+```
+
+
+
+
+```{r Missing Data}
+# Todo: 
+# Set seed
+# Split into training and test data
+# Train imputation model explicitly on training data
+# Predict values with the same model on the test data and use this as new test.
+
+# Setting seed expressing our love for MA8701
+set.seed(8701)
+
+
 
 #--------------------------------------------------------------------------------------------------------
 # ---------------------- Removing all samples that have more than one covariate missing -----------------
@@ -172,7 +178,7 @@ gg_miss_var(data2)
 
 
 
-# Split into training and test data
+#---------------Split into training and test data------------------------------------------------------ 
 
 #Which should go where?
 dim_data2 = dim(data2)[1]
@@ -192,11 +198,11 @@ y.train_dat2 = data2$TenYearCHD[spl_dat2]
 y.test_dat2 = data2$TenYearCHD[-spl_dat2]
 
 
-## Predicting new glucose data.
+#-------------------------- Predicting and imputing new glucose data ---------------------------------
 
 # We fit a linear model on the training set.
 
-fit_for_simp_glucose_2 <- lm(glucose ~., data = x.train_dat2) # Should we have included the response? Think not.
+fit_for_simp_glucose_2 <- lm(glucose ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
 
 # Checking if this is good. It is not. Adjusted R^2 is totally balls.
 summary(fit_for_simp_glucose_2)
@@ -213,19 +219,19 @@ test_data_to_pred_gluc_2 = test_data_to_pred_gluc_2[ici(test_data_to_pred_gluc_2
 
 # Predict them
 pred_glucose_train_2 <- predict(fit_for_simp_glucose_2, newdata = train_data_to_pred_gluc_2) 
-pred_glucose_test_2 <- predict(fit_for_simp_glucose2, newdata = test_data_to_pred_gluc_2)
+pred_glucose_test_2 <- predict(fit_for_simp_glucose_2, newdata = test_data_to_pred_gluc_2)
 
 
 
 ## Lets see what we predicted
 
-plot(train_data$glucose)
+plot(x.train_dat2$glucose)
 plot(pred_glucose_train_2)
 
 # Make histogram objects
 
-hg_pred = hist(pred_glucose_train_2, plot = FALSE)
-hg_old = hist(train_data$glucose, plot = FALSE)
+hg_pred_gluc = hist(pred_glucose_train_2, plot = FALSE)
+hg_old_gluc = hist(x.train_dat2$glucose, plot = FALSE)
 
 
 # Make transparent colors
@@ -233,8 +239,8 @@ c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
 c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
 
 # Plot together
-plot(hg_old, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred, , col = c2, add = TRUE)
+plot(hg_old_gluc, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred_gluc, , col = c2, add = TRUE)
 
 
 ## Add predictions into original data by changing those with incomplete glucose
@@ -250,11 +256,328 @@ md.pattern(x.test_dat2)
 gg_miss_var(x.test_dat2)
 
 
+#------We continue to do this with the other cont. variables {Cigs per day, BMI, TotChol, HR (only for training data)}, based on the original complete case----
+# Could discuss whether or not this is the right approach, but we don't want to correlate the data even more, and therfore we don't base
+# the prediction of cigs, BMI, etc... on the newly predicted glucose data and whatnot. Keep it simple with the old training data. 
 
-# Can do this again for the other variables needed. Is this ok? 
 
 
 
+#-------------------------- Predicting and imputing new data for Cigs Per Day ---------------------------------
+
+
+
+
+# We fit a linear model on the training set.
+
+fit_for_simp_cigs_2 <- lm(cigsPerDay ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_cigs_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_cigs_2 = ic(x.train_dat2)
+train_data_to_pred_cigs_2 = train_data_to_pred_cigs_2[ici(train_data_to_pred_cigs_2$cigsPerDay),]
+
+test_data_to_pred_cigs_2 = ic(x.test_dat2)
+test_data_to_pred_cigs_2 = test_data_to_pred_cigs_2[ici(test_data_to_pred_cigs_2$cigsPerDay),]
+
+
+# Predict them
+pred_cigs_train_2 <- predict(fit_for_simp_cigs_2, newdata = train_data_to_pred_cigs_2) 
+pred_cigs_test_2 <- predict(fit_for_simp_cigs_2, newdata = test_data_to_pred_cigs_2)
+
+
+
+## Lets see what we predicted
+
+plot(x.train_dat2$cigs)
+plot(pred_cigs_train_2)
+
+# Make histogram objects
+
+hg_pred_cigs = hist(pred_cigs_train_2, plot = FALSE)
+hg_old_cigs = hist(x.train_dat2$cigsPerDay, plot = FALSE)
+
+# Plot together (basically useless because of few samples, but can probably fix that).
+plot(hg_old_cigs, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred_cigs, , col = c2, add = TRUE)
+
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$cigsPerDay),]$cigsPerDay <- pred_cigs_train_2
+x.test_dat2[ici(x.test_dat2$cigsPerDay),]$cigsPerDay <- pred_cigs_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+# We continue to do this with the other continuous variables {BMI, TotChol, HR (only for training data)}
+
+
+#-------------------------- Predicting and imputing new data for BMI ---------------------------------
+
+
+
+
+# We fit a linear model on the training set.
+
+fit_for_simp_BMI_2 <- lm(BMI ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_BMI_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_BMI_2 = ic(x.train_dat2)
+train_data_to_pred_BMI_2 = train_data_to_pred_BMI_2[ici(train_data_to_pred_BMI_2$BMI),]
+
+test_data_to_pred_BMI_2 = ic(x.test_dat2)
+test_data_to_pred_BMI_2 = test_data_to_pred_BMI_2[ici(test_data_to_pred_BMI_2$BMI),]
+
+
+# Predict them
+pred_BMI_train_2 <- predict(fit_for_simp_BMI_2, newdata = train_data_to_pred_BMI_2) 
+pred_BMI_test_2 <- predict(fit_for_simp_BMI_2, newdata = test_data_to_pred_BMI_2)
+
+
+
+## Lets see what we predicted
+
+plot(x.train_dat2$BMI)
+plot(pred_BMI_train_2)
+
+# Make histogram objects
+
+hg_pred_BMI = hist(pred_BMI_train_2, plot = FALSE)
+hg_old_BMI = hist(x.train_dat2$BMI, plot = FALSE)
+
+# Plot together (basically useless because of few samples, but can probably fix that).
+plot(hg_old_BMI, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred_BMI, col = c2, add = TRUE)
+
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$BMI),]$BMI <- pred_BMI_train_2
+x.test_dat2[ici(x.test_dat2$BMI),]$BMI <- pred_BMI_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+# We continue to do this with the other continuous variables {TotChol, HR (only for training data)}
+
+
+#-------------------------- Predicting and imputing new data for TotChol ---------------------------------
+
+
+
+
+# We fit a linear model on the training set.
+
+fit_for_simp_totChol_2 <- lm(totChol ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_totChol_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_totChol_2 = ic(x.train_dat2)
+train_data_to_pred_totChol_2 = train_data_to_pred_totChol_2[ici(train_data_to_pred_totChol_2$totChol),]
+
+test_data_to_pred_totChol_2 = ic(x.test_dat2)
+test_data_to_pred_totChol_2 = test_data_to_pred_totChol_2[ici(test_data_to_pred_totChol_2$totChol),]
+
+
+# Predict them
+pred_totChol_train_2 <- predict(fit_for_simp_totChol_2, newdata = train_data_to_pred_totChol_2) 
+pred_totChol_test_2 <- predict(fit_for_simp_totChol_2, newdata = test_data_to_pred_totChol_2)
+
+
+
+## Lets see what we predicted
+
+plot(x.train_dat2$totChol)
+plot(pred_totChol_train_2)
+
+# Make histogram objects
+
+hg_pred_totChol = hist(pred_totChol_train_2, plot = FALSE)
+hg_old_totChol = hist(x.train_dat2$totChol, plot = FALSE)
+
+# Plot together (basically useless because of few samples, but can probably fix that).
+plot(hg_old_totChol, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred_totChol, col = c2, add = TRUE)
+
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$totChol),]$totChol <- pred_totChol_train_2
+x.test_dat2[ici(x.test_dat2$totChol),]$totChol <- pred_totChol_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+# We continue to do this with the other continuous variables {HR (only for training data)}
+
+
+#-------------------------- Predicting and imputing new data for HR (training data) ---------------------------------
+
+
+
+
+# We fit a linear model on the training set.
+
+fit_for_simp_heartRate_2 <- lm(heartRate ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_heartRate_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_heartRate_2 = ic(x.train_dat2)
+train_data_to_pred_heartRate_2 = train_data_to_pred_heartRate_2[ici(train_data_to_pred_heartRate_2$heartRate),]
+
+
+# Predict
+pred_heartRate_train_2 <- predict(fit_for_simp_heartRate_2, newdata = train_data_to_pred_heartRate_2) 
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$heartRate),]$heartRate <- pred_heartRate_train_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+# We continue to do this with the binary variable BP, using logistic regression for classification.
+
+
+
+#-------------------------- Predicting and imputing new data for BPMeds (Binary) ---------------------------------
+
+
+
+
+# We fit a logistic model on the training set.
+
+fit_for_simp_BPMeds_2 <- glm(BPMeds ~., data = x.train_dat2, family = "binomial") # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. It is not. Adjusted R^2 is totally balls.
+summary(fit_for_simp_BPMeds_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_BPMeds_2 = ic(x.train_dat2)
+train_data_to_pred_BPMeds_2 = train_data_to_pred_BPMeds_2[ici(train_data_to_pred_BPMeds_2$BPMeds),]
+
+test_data_to_pred_BPMeds_2 = ic(x.test_dat2)
+test_data_to_pred_BPMeds_2 = test_data_to_pred_BPMeds_2[ici(test_data_to_pred_BPMeds_2$BPMeds),]
+
+
+# Predict them (first numerically in (0,1), then classify to 0 or 1 depending on value)
+pred_BPMeds_train_2_probs <- predict(fit_for_simp_BPMeds_2, newdata = train_data_to_pred_BPMeds_2, type = "response") 
+pred_BPMeds_test_2_probs <- predict(fit_for_simp_BPMeds_2, newdata = test_data_to_pred_BPMeds_2, type = "response")
+
+pred_BPMeds_train_2 <- ifelse(pred_BPMeds_train_2_probs >= 0.5, 1, 0)
+pred_BPMeds_test_2 <- ifelse(pred_BPMeds_test_2_probs >= 0.5, 1, 0)
+
+
+## Lets see what we predicted
+
+plot(x.train_dat2$BPMeds)
+plot(pred_BPMeds_train_2) # Seems like a reasonable (~ 1/41) was classified as 1, compared to the training data. 
+
+# Make histogram objects
+
+hg_pred_BPMeds = hist(pred_BPMeds_train_2, plot = FALSE)
+hg_old_BPMeds = hist(x.train_dat2$BPMeds, plot = FALSE)
+
+# Plot together (basically useless because of few samples, but can probably fix that).
+plot(hg_old_BPMeds, col = c1) # Plot 1st histogram using a transparent color
+plot(hg_pred_BPMeds, col = c2, add = TRUE)
+
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$BPMeds),]$BPMeds <- pred_BPMeds_train_2
+x.test_dat2[ici(x.test_dat2$BPMeds),]$BPMeds <- pred_BPMeds_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
+
+# We continue to do this with the last variable, education, which is a four-class variable. We use KNN.
+
+
+
+
+#-------------------------- Predicting and imputing new data for Education (Multiclass) ---------------------------------
+
+?gknn
+
+# We fit a KNN model for classification on the training set.
+
+fit_for_simp_edu_2 <- gknn(education ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+
+# Checking if this is good. Idk? Not understandable when using KNN.
+summary(fit_for_simp_edu_2)
+
+# Prediction 
+
+# Which should be predicted?
+train_data_to_pred_edu_2 = ic(x.train_dat2)
+train_data_to_pred_edu_2 = train_data_to_pred_edu_2[ici(train_data_to_pred_edu_2$education),]
+
+test_data_to_pred_edu_2 = ic(x.test_dat2)
+test_data_to_pred_edu_2 = test_data_to_pred_edu_2[ici(test_data_to_pred_edu_2$education),]
+
+
+# Predict them (first numerically in (0,1), then classify to 0 or 1 depending on value)
+pred_edu_train_2 <- predict(fit_for_simp_edu_2, newdata = train_data_to_pred_edu_2, type = "class") 
+pred_edu_test_2 <- predict(fit_for_simp_edu_2, newdata = test_data_to_pred_edu_2, type = "class")
+
+
+## Lets see what we predicted
+
+plot(x.train_dat2$education)
+plot(pred_edu_train_2) # Seems like a reasonable (~ 1/41) was classified as 1, compared to the training data. 
+
+## Add predictions into original data by changing those with incomplete glucose
+
+
+x.train_dat2[ici(x.train_dat2$education),]$education <- pred_edu_train_2
+x.test_dat2[ici(x.test_dat2$education),]$education <- pred_edu_test_2
+
+md.pattern(x.train_dat2)
+gg_miss_var(x.train_dat2)
+
+md.pattern(x.test_dat2)
+gg_miss_var(x.test_dat2)
 
 
 
