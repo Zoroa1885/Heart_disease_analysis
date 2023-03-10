@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.wh
 ```
 
 
-# Setup
+
 
 ```{r Loading Packages,eval=TRUE,echo=FALSE}
 # Load libraries
@@ -29,6 +29,8 @@ library(ggcorrplot)
 library(ggplot2)
 library(e1071) #If we use KNN for imputation of education (multiclass)
 ```
+
+# Introduction
 
 Plan for the project: 
 \begin{itemize}
@@ -80,24 +82,29 @@ str(df_complete)
 
 
 # Split data into training and test
+tr = 7/10 # train ratio
 r = dim(df_complete)[1]
-size = r-round(r/5)
+size = round(r*tr)
 spl = sample(1:r,size = size)
-X = model.matrix(TenYearCHD ~  ., data = df_complete)[,-1]
-x.train = X[spl,]
-x.test = X[-spl,]
-y.train = df_complete$TenYearCHD[spl]
-y.test = df_complete$TenYearCHD[-spl]
+X = model.matrix(TenYearCHD ~  .-1, data = df_complete)[,-1]
+x.train_c = X[spl,]
+x.test_c = X[-spl,]
+y.train_c = df_complete$TenYearCHD[spl]
+y.test_c = df_complete$TenYearCHD[-spl]
 ```
 
-```{r exp analysis}
+```{r exp analysis, eval = F}
 # Make a correlation plot 
-cor_mat = cor(df_complete)
+cor_mat2 = cor(subset(df_complete, select = -education)) 
+cor_mat = cor(X)
 ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
    outline.col = "white",
    colors = c("blue", "white", "red"))
+ggcorrplot(cor_mat2, hc.order = TRUE, type = "lower",
+   outline.col = "white",
+   colors = c("blue", "white", "red"))
 ```
-## Missing Data
+# Missing Data
 
 To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubins rules need to be combined with the Lasso, bootstrap and concluding inference. 
 
@@ -597,7 +604,7 @@ lasso_coef[,1]
 
 
 
-```{r Bootstrap Lasso}
+```{r Bootstrap Lasso, eval = F}
 B = 1000
 
 B_coef = matrix(NA, nrow = B, ncol = 16)
@@ -619,7 +626,7 @@ apply(B_coef, 2, sum)
 ```
 
 ## Ridge 
-```{r Ridge Model}
+```{r Ridge Model, eval = F}
 response <- "TenYearCHD"
 features <- names(df_complete)[!names(df_complete) %in% c("TenYearCHD")]
 
@@ -651,7 +658,7 @@ print(ridge_cv)
 coef(ridge_cv, s = "lambda.1se")
 ```
 Make a fit with the best lambda and measuring error
-```{r}
+```{r, eval = F}
 ridge_fit = glmnet(X_train, y_train, lambda = lambda_min, alpha = 0, family = "binomial")
 ridge_pred = predict(ridge_fit, X_test, type = "class")
 
@@ -665,3 +672,7 @@ mse_ridge = mean((ridge_pred - y_test)^2)
 mse_ridge
 ```
 
+
+# Inference
+
+# Discussion
