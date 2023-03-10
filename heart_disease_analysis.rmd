@@ -4,8 +4,8 @@ title: "Compulsory exercise: Team Supergreat"
 author: "Nora Aasen, Elias Angelsen, Jonas Nordstr?m"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
-  html_document
-  # pdf_document
+  # html_document
+  pdf_document
 ---
   
 ```{r setup, include=FALSE}
@@ -162,6 +162,7 @@ We further split the data into a training and test set, following the training-t
 ``` {r Missing data split}
 
 # Assigning which values should go where by randomly sampling the indices. 
+tr = 7/10 # train ratio
 dim_data_m = dim(data_m)[1]
 size_split_m = round(dim_data_m*tr)
 spl_dat_m = sample(1:dim_data_m, size = size_split_m)
@@ -400,11 +401,11 @@ To see this, we consider the missing data patterns of the newly constructed data
 ``` {r Missing data final}
 
 # For training data
-md.pattern(x.train_imp)
+md1 = md.pattern(x.train_imp)
 gg_miss_var(x.train_imp)
 
 # For test data
-md.pattern(x.test_imp)
+md2 = md.pattern(x.test_imp)
 gg_miss_var(x.test_imp)
 
 ```
@@ -428,7 +429,6 @@ In the model section we will consider two data sets: the complete case and imput
 
 ```{r complete train test}
 # Split the complete data into training and test
-tr = 7/10 # train ratio
 r = dim(df_complete)[1]
 size = round(r*tr)
 train = sample(1:r,size = size)
@@ -470,7 +470,7 @@ lasso_coef[,1]
 ``` 
 
 
-```{r Bootstrap Lasso}
+```{r Bootstrap Lasso, eval = F}
 B = 500
 
 B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
@@ -504,8 +504,6 @@ mod <- glm(TenYearCHD ~ 1 + age + male + sysBP, data = df_complete[-train,], fam
 
 confint(mod)
 
-
-
 confint(mod0)
 
 ```
@@ -513,23 +511,9 @@ confint(mod0)
 
 # Discussion
 
-Plan for the project: 
-\begin{itemize}
-\item Start by fitting lasso in bootstrap using complete data
-\item Then singular imputation in training set and use same in test set
-\item Fit a lasso within bootstrap
-\item New method: still fitting lasso but this time do single imputation within the bootstrap
-\item Compare the three different methods
-\item Fit logistic regression and do inference under glm assumptions
-\end{itemize}
+STILL MISSING TO DO: 
 
-
-New plan of 10.03?
-Plan for the project: 
-\begin{itemize}
-\item Start by fitting lasso with bootstrap using complete data
-\item Do single imputation (reg. with different models) in training set and use same in test set
-\item Fit a lasso within bootstrap
-\item Compare the two different methods
-\item Fit logistic regression and do inference under glm assumptions
-\end{itemize}
+Is lasso implemented correctly? 
+Why is the bootstrap so slow? Final run should be with seed(8701) and B = 1000.
+Copy paste the lasso code for imputed data.
+Finish the inference and discussion. Mainly focus on comparison of complete case vs. imputed? 
