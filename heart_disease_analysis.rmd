@@ -10,12 +10,10 @@ output:
   
 ```{r setup, include=FALSE}
 library(knitr)
-knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE,
+knitr::opts_chunk$set(echo = FALSE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE,
                       cache=TRUE, size="scriptsize",
-                      fig.width=4, fig.height=3,fig.align = "center")
+                      fig.width=6, fig.height=4.5,fig.align = "center")
 ```
-
-
 
 
 ```{r Loading Packages,eval=TRUE,echo=FALSE}
@@ -23,6 +21,7 @@ knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.wh
 library(naniar)
 library(mice)
 library(glmnet)
+library(tidyr)
 library(dplyr)
 library(caret)
 library(ggcorrplot)
@@ -32,27 +31,10 @@ library(e1071) #If we use KNN for imputation of education (multiclass)
 
 # Introduction
 
-Plan for the project: 
-\begin{itemize}
-\item Start by fitting lasso in bootstrap using complete data
-\item Then singular imputation in training set and use same in test set
-\item Fit a lasso within bootstrap
-\item New method: still fitting lasso but this time do single imputation within the bootstrap
-\item Compare the three different methods
-\item Fit logistic regression and do inference under glm assumptions
-\end{itemize}
+In this project we have studied the [Framingham Coronary Heart Disease Dataset](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression?fbclid=IwAR1LE3P3vM1SyHBifotrNdXoKGv7szGR07labEAQo6XUqV9Pi90vtAp4mS4). This dataset contains patient information for inhabitants in Framingham, Massachusetts, and is typically used to predict the chance of getting coronary heart disease (CHD) within the next 10 years. For this project, however, we intend to use lasso to find the most important risk factors.
 
 
-New plan of 10.03?
-Plan for the project: 
-\begin{itemize}
-\item Start by fitting lasso with bootstrap using complete data
-\item Do single imputation (reg. with different models) in training set and use same in test set
-\item Fit a lasso within bootstrap
-\item Compare the two different methods
-\item Fit logistic regression and do inference under glm assumptions
-\end{itemize}
-
+We start by examining the dataset. 
 
 
 ## Exploratory Analysis
@@ -60,50 +42,57 @@ Plan for the project:
 # Load and look at data
 # data <- framingham # Just if manual import
 data <- read.csv("framingham.csv")
-dim(data)
-sum(data$TenYearCHD==1)
-head(data)
+data_dim = dim(data)
+pos_response = sum(data$TenYearCHD==1)
 str(data)
+
+
+ggplot(gather(data), aes(value)) + 
+    geom_histogram(bins = 16) + 
+    facet_wrap(~key, scales = 'free_x')
 
 # Code education as a factor variable instead
 data$education = factor(data$education, labels = c("none","hs","college","post-grad"))
 
-# Look at the missing data
-md.pattern(data)
-gg_miss_var(data)
-
-# Make a dataset containing only the complete cases
-df_complete <- data[complete.cases(data), ]
-dim(df_complete)
-sum(df_complete$TenYearCHD==1)
-str(df_complete)
-# View(df_complete)
-# Should we code the binary responses to be categorical instead of integers? 
-
-
-# Split data into training and test
-tr = 7/10 # train ratio
-r = dim(df_complete)[1]
-size = round(r*tr)
-spl = sample(1:r,size = size)
-X = model.matrix(TenYearCHD ~  .-1, data = df_complete)[,-1]
-x.train_c = X[spl,]
-x.test_c = X[-spl,]
-y.train_c = df_complete$TenYearCHD[spl]
-y.test_c = df_complete$TenYearCHD[-spl]
 ```
 
+This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, thus we will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we notice that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and naive guessing we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
+
+The next thing we looked at was the number of missing data in our data set.
+
+```{r plot missing data}
+# Look at the missing data
+md_mat = md.pattern(data, rotate.names = T, plot = T) # Can we make these plots prettier?
+gg_miss_var(data)
+
+```
+
+
+As we can see there are six covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.  
+
+```{r complete case}
+# Make a dataset containing only the complete cases
+df_complete <- data[complete.cases(data), ]
+data_dim_c = dim(df_complete)
+pos_response_c = sum(df_complete$TenYearCHD==1)
+```
+
+The complete data set contains `r data_dim_c[1]` observations and the response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response_c/data_dim_c[1]*100,1)`\% of the total observations. As we can see, the proportion of positive observations in the response is the same, which is a good indicator that our data is missing at random (MAR), and it is therefore possible to do imputation.
+
+From the exploratory analysis we see that there are many missing data points. However, the complete case data set is also quite large. Our main focus for this project will therefore be to compare the results from doing lasso on the complete case with the results from doing lasso on an imputed data set. 
+
+
 ```{r exp analysis, eval = F}
+# Is it of interest to consider a correlation plot in this case? 
+
 # Make a correlation plot 
-cor_mat2 = cor(subset(df_complete, select = -education)) 
-cor_mat = cor(X)
+cor_mat = cor(subset(df_complete, select = -education)) # Cannot compute correlation with factor variables
 ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
    outline.col = "white",
    colors = c("blue", "white", "red"))
-ggcorrplot(cor_mat2, hc.order = TRUE, type = "lower",
-   outline.col = "white",
-   colors = c("blue", "white", "red"))
 ```
+
+ 
 # Missing Data
 
 To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubins rules need to be combined with the Lasso, bootstrap and concluding inference. 
@@ -575,7 +564,18 @@ As mentioned, we did not include the response (TenYearCHD) in the regressions. I
 
 
 # Model
-
+```{r}
+# Split data into training and test
+tr = 7/10 # train ratio
+r = dim(df_complete)[1]
+size = round(r*tr)
+spl = sample(1:r,size = size)
+X = model.matrix(TenYearCHD ~  .-1, data = df_complete)[,-1]
+x.train_c = X[spl,]
+x.test_c = X[-spl,]
+y.train_c = df_complete$TenYearCHD[spl]
+y.test_c = df_complete$TenYearCHD[-spl]
+```
 ## Naive Approach
 ```{r Logistic Model}
 # Fit a logistic model
@@ -585,8 +585,8 @@ summary(mod0)
 ```
 
 
-## Lasso
-```{r Lasso}
+## Lasso on Complete Case 
+```{r Lasso, eval = F}
 # Må vi fjerne intercept før lasso? 
 
 # Use cross-validation to find lambda
@@ -625,54 +625,30 @@ apply(B_coef, 2, sum)
 
 ```
 
-## Ridge 
-```{r Ridge Model, eval = F}
-response <- "TenYearCHD"
-features <- names(df_complete)[!names(df_complete) %in% c("TenYearCHD")]
-
-df_complete["education"] <- factor(df_complete$education, labels = c("None", "HighSchool", "Collage", "Grad"))
-
-X <- model.matrix(~.-1, df_complete[features])
-y <- df_complete[response]
-
-train_frac = 0.8
-train.ind <- sample(c(TRUE, FALSE), nrow(df_complete),
-                    replace=TRUE, prob=c(train_frac, 1-train_frac))
-
-X_train <- X[train.ind,]
-X_test <- X[!train.ind,]
-
-y_train <- y[train.ind,]
-y_test <- y[!train.ind,]
-
-ridge_cv <- cv.glmnet(X_train, y_train, family = "binomial", alpha = 0)
-
-plot(ridge_cv)
-lambda_min = ridge_cv$lambda.min
-lambda_1se = ridge_cv$lambda.1se
-cat("Lambda min:", lambda_min, "\n")
-cat("Lambda 1se:", lambda_1se)
-
-
-print(ridge_cv)
-coef(ridge_cv, s = "lambda.1se")
-```
-Make a fit with the best lambda and measuring error
-```{r, eval = F}
-ridge_fit = glmnet(X_train, y_train, lambda = lambda_min, alpha = 0, family = "binomial")
-ridge_pred = predict(ridge_fit, X_test, type = "class")
-
-ridge_pred_class = factor(round(ridge_pred))
-y_test <- factor(y_test)
-
-conf_mat <- confusionMatrix(ridge_pred_class, y_test)
-conf_mat
-
-mse_ridge = mean((ridge_pred - y_test)^2)
-mse_ridge
-```
+## Lasso on Imputed Data
 
 
 # Inference
 
 # Discussion
+
+Plan for the project: 
+\begin{itemize}
+\item Start by fitting lasso in bootstrap using complete data
+\item Then singular imputation in training set and use same in test set
+\item Fit a lasso within bootstrap
+\item New method: still fitting lasso but this time do single imputation within the bootstrap
+\item Compare the three different methods
+\item Fit logistic regression and do inference under glm assumptions
+\end{itemize}
+
+
+New plan of 10.03?
+Plan for the project: 
+\begin{itemize}
+\item Start by fitting lasso with bootstrap using complete data
+\item Do single imputation (reg. with different models) in training set and use same in test set
+\item Fit a lasso within bootstrap
+\item Compare the two different methods
+\item Fit logistic regression and do inference under glm assumptions
+\end{itemize}
