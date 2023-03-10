@@ -564,71 +564,93 @@ As mentioned, we did not include the response (TenYearCHD) in the regressions. I
 
 
 # Model
-```{r}
-# Split data into training and test
+
+In the model section we will consider two data sets: the complete case and imputed case. Both data sets are further divided into a train and test set. 
+
+```{r complete train test}
+# Split the complete data into training and test
 tr = 7/10 # train ratio
 r = dim(df_complete)[1]
 size = round(r*tr)
-spl = sample(1:r,size = size)
-X = model.matrix(TenYearCHD ~  .-1, data = df_complete)[,-1]
-x.train_c = X[spl,]
-x.test_c = X[-spl,]
-y.train_c = df_complete$TenYearCHD[spl]
-y.test_c = df_complete$TenYearCHD[-spl]
+train = sample(1:r,size = size)
+X = model.matrix(TenYearCHD ~  ., data = df_complete)[,-1] # Remove the response
+x.train_c = scale(X[train,])
+x.test_c = scale(X[-train,])
+y.train_c = df_complete$TenYearCHD[train]
+y.test_c = df_complete$TenYearCHD[-train]
+
+
 ```
-## Naive Approach
+
+
+Given the binary response it is natural to consider fitting a logistic regression model to our data. Although we intend to use lasso, it is nice to start by fitting a regular logistic regression model to get an indication of which covariates that are most present, and for later comparison. 
 ```{r Logistic Model}
 # Fit a logistic model
-mod0 <- glm(TenYearCHD ~ ., data = df_complete, family = binomial())
-
+mod0 <- glm(TenYearCHD ~ ., data = df_complete[train,], family = binomial())
+set.seed(294)
 summary(mod0)
 ```
 
+The logistic regression model chooses `r names(coefficients(mod0))[c(1,2,3,5,8,13,14,18)]` as the significant covariates. 
 
 ## Lasso on Complete Case 
-```{r Lasso, eval = F}
-# Må vi fjerne intercept før lasso? 
+
+Next we wish to do.
+```{r Lasso}
 
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(x.train, y.train, family = "binomial", alpha = 1)
-plot(cv.out$glmnet.fit, "lambda", label=FALSE)
+cv.out = cv.glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, alpha = 1)
+plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
-lasso_mod = glmnet(x.train, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 ``` 
 
 
+```{r Bootstrap Lasso}
+B = 500
 
-
-```{r Bootstrap Lasso, eval = F}
-B = 1000
-
-B_coef = matrix(NA, nrow = B, ncol = 16)
+B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
 for (i in 1:B){
-  print(i)
-  spl_b = sample(1:size, size = size, replace = TRUE)
-  x = x.train[spl_b,]
-  y = y.train[spl_b]
+  data_b = sample(1:size, size = size, replace = TRUE)
+  x = x.train_c[data_b,]
+  y = y.train_c[data_b]
   cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
-  lasso_mod = glmnet(x.train, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
 
   B_coef[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
 }
 
 colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
-B_coef = ifelse(B_coef == 0,0,1)
-apply(B_coef, 2, sum)
+boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55))
 
+B_coef_count = ifelse(B_coef == 0,0,1)
+apply(B_coef_count, 2, sum)
+barplot(apply(B_coef_count, 2, sum)/B)
 ```
 
 ## Lasso on Imputed Data
 
 
 # Inference
+
+In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping iteration in last section, and now use the test data to fit a logistic model to avoid overfitting. 
+
+```{r complete case comparison}
+mod <- glm(TenYearCHD ~ 1 + age + male + sysBP, data = df_complete[-train,], family = binomial())
+
+confint(mod)
+
+
+
+confint(mod0)
+
+```
+
 
 # Discussion
 
