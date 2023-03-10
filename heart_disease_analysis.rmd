@@ -129,7 +129,7 @@ Our data is split into training and test sets, of sizes approximately $80%$ and 
 In order to avoid data leakage in our imputation if the test set, we fit the imputation models on the training set.
 Note that we do not include the response (TenYearCHD) in the regression, and in order to avoid too much correlation between the imputed samples, we always base the regression models on the complete case data, instead of letting the imputed values for variable $n$ regress to impute variable $n+1$.  
 
-First, we are removing all samples with more than one covariate missing.
+First, we are removing all samples with more than one covariate missing, as this is only $61$ samples. 
 
 ```{r Clean Missing Data}
 
