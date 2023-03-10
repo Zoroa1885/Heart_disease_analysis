@@ -42,6 +42,19 @@ Plan for the project:
 \item Fit logistic regression and do inference under glm assumptions
 \end{itemize}
 
+
+New plan of 10.03?
+Plan for the project: 
+\begin{itemize}
+\item Start by fitting lasso with bootstrap using complete data
+\item Do single imputation (reg. with different models) in training set and use same in test set
+\item Fit a lasso within bootstrap
+\item Compare the two different methods
+\item Fit logistic regression and do inference under glm assumptions
+\end{itemize}
+
+
+
 ## Exploratory Analysis
 ```{r Loading Data}
 # Load and look at data
@@ -187,7 +200,8 @@ pred_glucose_test_2 <- predict(fit_for_simp_glucose_2, newdata = test_data_to_pr
 # Lets see what we predicted, using base plot. 
 
 plot(x.train_dat2$glucose)
-plot(pred_glucose_train_2)
+points(seq(1,length(x.train_dat2[,1]),length.out = length(pred_glucose_train_2)),pred_glucose_train_2, col = "orange")
+abline(h = mean(x.train_dat2$glucose), col = "red")
 
 # Can also do this by making histogram objects
 
@@ -220,9 +234,9 @@ gg_miss_var(x.test_dat2)
 
 # We continue to do this with the other cont. variables {Cigs per day, BMI, TotChol, HR (only for training data)}, based on the original complete case.
 
-
-#-------------------------- Predicting and imputing new data for Cigs Per Day ---------------------------------
-
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for Cigs Per Day ----------------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 
 
@@ -280,8 +294,9 @@ gg_miss_var(x.test_dat2)
 # We continue to do this with the other continuous variables {BMI, TotChol, HR (only for training data)}
 
 
-#-------------------------- Predicting and imputing new data for BMI ---------------------------------
-
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for BMI -------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 
 
@@ -340,8 +355,9 @@ gg_miss_var(x.test_dat2)
 # We continue to do this with the other continuous variables {TotChol, HR (only for training data)}
 
 
-#-------------------------- Predicting and imputing new data for TotChol ---------------------------------
-
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for TotChol ---------------------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 
 
@@ -398,15 +414,15 @@ gg_miss_var(x.test_dat2)
 
 # We continue to do this with the other continuous variables {HR (only for training data)}
 
-
-#-------------------------- Predicting and imputing new data for HR (training data) ---------------------------------
-
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for HR (training data) ----------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 
 
 # We fit a linear model on the training set.
 
-fit_for_simp_heartRate_2 <- lm(heartRate ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+fit_for_simp_heartRate_2 <- lm(heartRate ~., data = x.train_dat2) 
 
 # Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
 # summary(fit_for_simp_heartRate_2)
@@ -436,14 +452,15 @@ gg_miss_var(x.test_dat2)
 
 
 
-#-------------------------- Predicting and imputing new data for BPMeds (Binary) ---------------------------------
-
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for BPMeds (Binary) -------------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 
 
 # We fit a logistic model on the training set.
 
-fit_for_simp_BPMeds_2 <- glm(BPMeds ~., data = x.train_dat2, family = "binomial") # Q: Should the response be included? Open question :( We think no. Argue why later!
+fit_for_simp_BPMeds_2 <- glm(BPMeds ~., data = x.train_dat2, family = "binomial")
 
 # Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
 # summary(fit_for_simp_BPMeds_2)
@@ -499,8 +516,10 @@ gg_miss_var(x.test_dat2)
 
 
 
+#---------------------------------------------------------------------------------------------------------------
+#-------------------------- Predicting and imputing new data for Education (Multiclass) ------------------------
+#---------------------------------------------------------------------------------------------------------------
 
-#-------------------------- Predicting and imputing new data for Education (Multiclass) ---------------------------------
 
 # We fit a KNN model for classification on the training set.
 
@@ -543,7 +562,7 @@ gg_miss_var(x.test_dat2)
 
 ```
 
-There are several steps in this procedure that could be improved upon. First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several models on the training set and done an evaluation procedure within the training set (e.g. crossvalidated optimization of ROC-AUC) to pick the models imputing each variable. 
+There are several steps in this procedure that could be improved upon. First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several models on the training set and done an evaluation procedure within the training set (e.g. cross validated optimization of ROC-AUC) to pick the models imputing each variable. 
 
 As mentioned, we did not include the response (TenYearCHD) in the regressions. It is not clear to us why it would be a better choice to include it. More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice.
 
