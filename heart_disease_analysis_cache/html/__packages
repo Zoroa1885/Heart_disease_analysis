@@ -3,3 +3,9 @@ naniar
 mice
 Matrix
 glmnet
+dplyr
+ggplot2
+lattice
+caret
+ggcorrplot
+e1071

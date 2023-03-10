@@ -77,7 +77,7 @@ y.train = df_complete$TenYearCHD[spl]
 y.test = df_complete$TenYearCHD[-spl]
 ```
 
-```{r exp analysis}
+```{r exp analysis, eval = F}
 # Make a correlation plot 
 cor_mat = cor(df_complete)
 ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
@@ -572,7 +572,7 @@ lasso_coef[,1]
 
 
 
-```{r Bootstrap Lasso}
+```{r Bootstrap Lasso, eval = F}
 B = 1000
 
 B_coef = matrix(NA, nrow = B, ncol = 16)
@@ -594,7 +594,7 @@ apply(B_coef, 2, sum)
 ```
 
 ## Ridge 
-```{r Ridge Model}
+```{r Ridge Model, eval = F}
 response <- "TenYearCHD"
 features <- names(df_complete)[!names(df_complete) %in% c("TenYearCHD")]
 
@@ -626,7 +626,7 @@ print(ridge_cv)
 coef(ridge_cv, s = "lambda.1se")
 ```
 Make a fit with the best lambda and measuring error
-```{r}
+```{r, eval = F}
 ridge_fit = glmnet(X_train, y_train, lambda = lambda_min, alpha = 0, family = "binomial")
 ridge_pred = predict(ridge_fit, X_test, type = "class")
 
