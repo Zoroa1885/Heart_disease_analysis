@@ -92,8 +92,32 @@ ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
    colors = c("blue", "white", "red"))
 ```
 
- 
+
 # Missing Data
+
+In our data set, we have some missing values, and we are going to handle these missing values in a slightly more refined manner than just considering the complete case (although our approach will be focused on being exploratory/explicit for the sake of learning instead of "optimal").
+
+First, as a theoretical warm-up, recall that there are several types of mechanisms for missing data.
+Let $Z = (X,y)$ denote the full collection of covariates and responses, respectively, and we let a subscript mis/obs indicate restricting $Z$ or $X$ to the missing or observed parts, respectively.
+We may form an indicator (0-1) matrix $R$ indicating missing (0) covariates and observed (1) covariates. 
+Assume $\psi$ is short notation for the parameters in the distribution of $R$.
+
+The missing data may be characterized by the conditioning in the distribution of $R$.
+We define the data to be:
+\begin{itemize}
+  \item missing completely at random (MCAR) if $P(R | Z, \psi) = P(R | \psi)$,
+  \item missing at random (MAR) if $P(R | Z, \psi) = P(R | Z_{obs}, \psi)$,
+  \item missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$ (we don't have MCAR or MAR).
+\end{itemize}
+
+By exploring for example the missing pattern of the variable cigsPerDay, we obtain a clear indication that our missing mechanism is not MCAR.
+No non-smoker has failed to answer the question "how may cigarettes do you smoke a day?", which is a question only aimed at smokers. 
+The simple explanation may be that the survey they answered automatically fills in $0$ for cigsPerDay if you claim to be a non-smoker. 
+In more mathematical terms, cigsPerDay depends on the observed answer to "do you smoke?" (found in variable currentSmoker), indicating that we do not work with MCAR data.
+Luckily, most methods are applicable if our missingness is at least MAR. 
+
+We will assume that the missing mechanism is MAR, as there is no clear reason to suspect it to be MNAR. 
+A pressing obstruction to being MAR can again be found in cigsPerDay. In the real world, if smokers have failed to report cigsPerDay, it may for example be because they smoke so much that they are ashamed to answer the question (and skips it), but we will simply assume that such a thing is not happening, as we trust people to answer truthfully (often, at least) if they volunteer for medical studies. 
 
 To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubins rules need to be combined with the Lasso, bootstrap and concluding inference. 
 
@@ -105,7 +129,7 @@ Our data is split into training and test sets, of sizes approximately $80%$ and 
 In order to avoid data leakage in our imputation if the test set, we fit the imputation models on the training set.
 Note that we do not include the response (TenYearCHD) in the regression, and in order to avoid too much correlation between the imputed samples, we always base the regression models on the complete case data, instead of letting the imputed values for variable $n$ regress to impute variable $n+1$.  
 
-First, we are removing all samples with more than one covariate missing.
+First, we are removing all samples with more than one covariate missing, as this is only $61$ samples. 
 
 ```{r Clean Missing Data}
 
@@ -137,9 +161,9 @@ We further split the data into a training and test set, following the training-t
 
 ``` {r Missing data split}
 
-# Assigning which values should go where by randomly sampling ~20% of the indices. 
+# Assigning which values should go where by randomly sampling the indices. 
 dim_data_m = dim(data_m)[1]
-size_split_m = dim_data_m-round(dim_data_m/5)
+size_split_m = round(dim_data_m*tr)
 spl_dat_m = sample(1:dim_data_m, size = size_split_m)
 
 # Making training and test data
@@ -157,411 +181,246 @@ y.test_dat_m = data_m$TenYearCHD[-spl_dat_m]
 
 ```
 
-Using the above data sets, we make regression models for each missing variable and predict the new values that are to be imputed.
+Using the above data sets, we make regression models for each missing variable based on the data we have. 
+These automatically neglects NA's. 
 
+``` {r Missing data regression models}
 
+# We fit linear models on the training set for glucose, cigsPerDay, BMI, totChol, heartRate.
+fit_for_simp_glucose_m <- lm(glucose ~., data = x.train_dat_m)    # Linear model for glucose
+fit_for_simp_cigs_m <- lm(cigsPerDay ~., data = x.train_dat_m)    # Linear model for cigsPerDay
+fit_for_simp_BMI_m <- lm(BMI ~., data = x.train_dat_m)            # Linear model for BMI
+fit_for_simp_totChol_m <- lm(totChol ~., data = x.train_dat_m)    # Linear model for totChol
+fit_for_simp_heartRate_m <- lm(heartRate ~., data = x.train_dat_m)# Linear model for heartRate 
 
-``` {r Missing data predictions}
+# We fit a logistic model on the training set for BPMeds, being a binary variable.
+fit_for_simp_BPMeds_m <- glm(BPMeds ~., data = x.train_dat_m, family = "binomial") #Logistic model for BPMeds
 
-# We fit linear models on the training set for glucose, cigsPerDay,
-
-fit_for_simp_glucose_m <- lm(glucose ~., data = x.train_dat_m) # Linear model for glucose
-fit_for_simp_cigs_m <- lm(cigsPerDay ~., data = x.train_dat_m) # Linear model for cigsPerDay
-
+# We fit a KNN model on the training set for education, being a multi-class variable.
+fit_for_simp_edu_m <- gknn(education ~., data = x.train_dat_m) # kNN model for education
 
 ```
 
-```{r MD preds old}
-#---------------------------------------------------------------------------------------------------------------
-#------------------------------ Predicting and imputing new glucose data ---------------------------------------
-#---------------------------------------------------------------------------------------------------------------
+To predict, we pick out those samples with missing values of each variable from the training and test set.
+Note that we are imputing for both the training and test set, even though the sampled (therefore "random") split into training and test set may have sorted all NA's of a variable (e.g. heartRate) into a single set (i.e. into either training or test set).
+This is not a problem, as we are only picking out the incomplete cases. Therefore, predicting and filling in the missing values is a vacuous operation, not yielding any problems.
 
+``` {r Missing data which-to-predict}
 
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation. 
-# summary(fit_for_simp_glucose_m)
-
-## --- Prediction --- 
-
-# Which should be predicted? # Pick out those variables with missing glucose values that we want to impute. 
+# Pick out those variables with missing glucose from the training and test set.
 train_data_to_pred_gluc_m = ic(x.train_dat_m)
 train_data_to_pred_gluc_m = train_data_to_pred_gluc_m[ici(train_data_to_pred_gluc_m$glucose),] 
-
 test_data_to_pred_gluc_m = ic(x.test_dat_m)
 test_data_to_pred_gluc_m = test_data_to_pred_gluc_m[ici(test_data_to_pred_gluc_m$glucose),]
 
-
-# Predict the variables with missing glucose values that we want to impute. 
-pred_glucose_train_m <- predict(fit_for_simp_glucose_m, newdata = train_data_to_pred_gluc_m) 
-pred_glucose_test_m <- predict(fit_for_simp_glucose_m, newdata = test_data_to_pred_gluc_m)
-
-
-## --- Visuals ---
-
-# Lets see what we predicted, using base plot. 
-
-plot(x.train_dat_m$glucose)
-points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_glucose_train_m)),pred_glucose_train_m, col = "orange")
-abline(h = mean(x.train_dat_m$glucose), col = "red")
-
-# Can also do this by making histogram objects
-
-hg_pred_gluc = hist(pred_glucose_train_m, plot = FALSE)
-hg_old_gluc = hist(x.train_dat_m$glucose, plot = FALSE)
-
-# Make transparent colors
-c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
-c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
-
-# Plot together
-plot(hg_old_gluc, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred_gluc, , col = c2, add = TRUE)
-
-
-## Add predictions into original data by changing those with incomplete glucose
-
-
-x.train_dat_m[ici(x.train_dat_m$glucose),]$glucose <- pred_glucose_train_m
-x.test_dat_m[ici(x.test_dat_m$glucose),]$glucose <- pred_glucose_test_m
-
-# Run these to see that we eliminated the missing variables.
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-
-# We continue to do this with the other cont. variables {Cigs per day, BMI, TotChol, HR (only for training data)}, based on the original complete case.
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for Cigs Per Day ----------------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation. 
-# summary(fit_for_simp_cigs_m)
-
-## --- Prediction --- 
-
-# Which should be predicted? # Pick out those variables with missing glucose values that we want to impute. 
+# Pick out those variables with missing cigsPerDay from the training and test set.
 train_data_to_pred_cigs_m = ic(x.train_dat_m)
 train_data_to_pred_cigs_m = train_data_to_pred_cigs_m[ici(train_data_to_pred_cigs_m$cigsPerDay),]
-
 test_data_to_pred_cigs_m = ic(x.test_dat_m)
 test_data_to_pred_cigs_m = test_data_to_pred_cigs_m[ici(test_data_to_pred_cigs_m$cigsPerDay),]
 
-
-# Predict the variables with missing glucose values that we want to impute.
-pred_cigs_train_m <- predict(fit_for_simp_cigs_m, newdata = train_data_to_pred_cigs_m) 
-pred_cigs_test_m <- predict(fit_for_simp_cigs_m, newdata = test_data_to_pred_cigs_m)
-
-
-## --- Visuals ---
-
-## Lets see what we predicted
-
-plot(x.train_dat_m$cigs)
-plot(pred_cigs_train_m)
-
-# Make histogram objects
-
-hg_pred_cigs = hist(pred_cigs_train_m, plot = FALSE)
-hg_old_cigs = hist(x.train_dat_m$cigsPerDay, plot = FALSE)
-
-# Plot together (basically useless because of few samples, but can probably fix that).
-plot(hg_old_cigs, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred_cigs, , col = c2, add = TRUE)
-
-
-## Add predictions into original data by changing those with incomplete cigsPerDay
-
-
-x.train_dat_m[ici(x.train_dat_m$cigsPerDay),]$cigsPerDay <- pred_cigs_train_m
-x.test_dat_m[ici(x.test_dat_m$cigsPerDay),]$cigsPerDay <- pred_cigs_test_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-# We continue to do this with the other continuous variables {BMI, TotChol, HR (only for training data)}
-
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for BMI -------------------------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-
-# We fit a linear model on the training set.
-
-fit_for_simp_BMI_m <- lm(BMI ~., data = x.train_dat_m) # Q: Should the response be included? Open question :( We think no. Argue why later!
-
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
-# summary(fit_for_simp_BMI_m)
-
-## --- Prediction --- 
-
-# Which should be predicted?
+# Pick out those variables with missing BMI from the training and test set.
 train_data_to_pred_BMI_m = ic(x.train_dat_m)
 train_data_to_pred_BMI_m = train_data_to_pred_BMI_m[ici(train_data_to_pred_BMI_m$BMI),]
-
 test_data_to_pred_BMI_m = ic(x.test_dat_m)
 test_data_to_pred_BMI_m = test_data_to_pred_BMI_m[ici(test_data_to_pred_BMI_m$BMI),]
 
-
-# Predict them
-pred_BMI_train_m <- predict(fit_for_simp_BMI_m, newdata = train_data_to_pred_BMI_m) 
-pred_BMI_test_m <- predict(fit_for_simp_BMI_m, newdata = test_data_to_pred_BMI_m)
-
-
-
-## --- Visuals ---
-
-## Lets see what we predicted
-
-plot(x.train_dat_m$BMI)
-plot(pred_BMI_train_m)
-
-# Make histogram objects
-
-hg_pred_BMI = hist(pred_BMI_train_m, plot = FALSE)
-hg_old_BMI = hist(x.train_dat_m$BMI, plot = FALSE)
-
-# Plot together (basically useless because of few samples, but can probably fix that).
-plot(hg_old_BMI, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred_BMI, col = c2, add = TRUE)
-
-
-## Add predictions into original data by changing those with incomplete BMI
-
-
-x.train_dat_m[ici(x.train_dat_m$BMI),]$BMI <- pred_BMI_train_m
-x.test_dat_m[ici(x.test_dat_m$BMI),]$BMI <- pred_BMI_test_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-# We continue to do this with the other continuous variables {TotChol, HR (only for training data)}
-
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for TotChol ---------------------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-
-# We fit a linear model on the training set.
-
-fit_for_simp_totChol_m <- lm(totChol ~., data = x.train_dat_m) # Q: Should the response be included? Open question :( We think no. Argue why later!
-
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
-# summary(fit_for_simp_totChol_m)
-
-## --- Prediction --- 
-
-# Which should be predicted?
+# Pick out those variables with missing totChol from the training and test set.
 train_data_to_pred_totChol_m = ic(x.train_dat_m)
 train_data_to_pred_totChol_m = train_data_to_pred_totChol_m[ici(train_data_to_pred_totChol_m$totChol),]
-
 test_data_to_pred_totChol_m = ic(x.test_dat_m)
 test_data_to_pred_totChol_m = test_data_to_pred_totChol_m[ici(test_data_to_pred_totChol_m$totChol),]
 
-
-# Predict them
-pred_totChol_train_m <- predict(fit_for_simp_totChol_m, newdata = train_data_to_pred_totChol_m) 
-pred_totChol_test_m <- predict(fit_for_simp_totChol_m, newdata = test_data_to_pred_totChol_m)
-
-
-## --- Visuals ---
-
-## Lets see what we predicted
-
-plot(x.train_dat_m$totChol)
-plot(pred_totChol_train_m)
-
-# Make histogram objects
-
-hg_pred_totChol = hist(pred_totChol_train_m, plot = FALSE)
-hg_old_totChol = hist(x.train_dat_m$totChol, plot = FALSE)
-
-# Plot together (basically useless because of few samples, but can probably fix that).
-plot(hg_old_totChol, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred_totChol, col = c2, add = TRUE)
-
-
-## Add predictions into original data by changing those with incomplete TotChol
-
-
-x.train_dat_m[ici(x.train_dat_m$totChol),]$totChol <- pred_totChol_train_m
-x.test_dat_m[ici(x.test_dat_m$totChol),]$totChol <- pred_totChol_test_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-# We continue to do this with the other continuous variables {HR (only for training data)}
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for HR (training data) ----------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-
-# We fit a linear model on the training set.
-
-fit_for_simp_heartRate_m <- lm(heartRate ~., data = x.train_dat_m) 
-
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
-# summary(fit_for_simp_heartRate_m)
-
-## --- Prediction --- 
-
-# Which should be predicted?
+# Pick out those variables with missing heartRate from the training and test set.
 train_data_to_pred_heartRate_m = ic(x.train_dat_m)
 train_data_to_pred_heartRate_m = train_data_to_pred_heartRate_m[ici(train_data_to_pred_heartRate_m$heartRate),]
+test_data_to_pred_heartRate_m = ic(x.test_dat_m)
+test_data_to_pred_heartRate_m = test_data_to_pred_heartRate_m[ici(test_data_to_pred_heartRate_m$heartRate),]
 
-
-# Predict
-pred_heartRate_train_m <- predict(fit_for_simp_heartRate_m, newdata = train_data_to_pred_heartRate_m) 
-
-## Add predictions into original data by changing those with incomplete HR
-
-
-x.train_dat_m[ici(x.train_dat_m$heartRate),]$heartRate <- pred_heartRate_train_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-# We continue to do this with the binary variable BP, using logistic regression for classification.
-
-
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for BPMeds (Binary) -------------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-
-# We fit a logistic model on the training set.
-
-fit_for_simp_BPMeds_m <- glm(BPMeds ~., data = x.train_dat_m, family = "binomial")
-
-# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
-# summary(fit_for_simp_BPMeds_m)
-
-## --- Prediction --- 
-
-# Which should be predicted?
+# Pick out those variables with missing BPMeds from the training and test set.
 train_data_to_pred_BPMeds_m = ic(x.train_dat_m)
 train_data_to_pred_BPMeds_m = train_data_to_pred_BPMeds_m[ici(train_data_to_pred_BPMeds_m$BPMeds),]
-
 test_data_to_pred_BPMeds_m = ic(x.test_dat_m)
 test_data_to_pred_BPMeds_m = test_data_to_pred_BPMeds_m[ici(test_data_to_pred_BPMeds_m$BPMeds),]
 
-
-# Predict them (first numerically in (0,1), then classify to 0 or 1 depending on value)
-pred_BPMeds_train_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = train_data_to_pred_BPMeds_m, type = "response") 
-pred_BPMeds_test_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = test_data_to_pred_BPMeds_m, type = "response")
-
-pred_BPMeds_train_m <- ifelse(pred_BPMeds_train_m_probs >= 0.5, 1, 0)
-pred_BPMeds_test_m <- ifelse(pred_BPMeds_test_m_probs >= 0.5, 1, 0)
-
-
-## --- Visuals ---
-
-## Lets see what we predicted
-
-plot(x.train_dat_m$BPMeds)
-plot(pred_BPMeds_train_m) # Seems like a reasonable (~ 1/41) was classified as 1, compared to the training data. 
-
-# Make histogram objects
-
-hg_pred_BPMeds = hist(pred_BPMeds_train_m, plot = FALSE)
-hg_old_BPMeds = hist(x.train_dat_m$BPMeds, plot = FALSE)
-
-# Plot together (basically useless because of few samples, but can probably fix that).
-plot(hg_old_BPMeds, col = c1) # Plot 1st histogram using a transparent color
-plot(hg_pred_BPMeds, col = c2, add = TRUE)
-
-
-## Add predictions into original data by changing those with incomplete BPMeds
-
-
-x.train_dat_m[ici(x.train_dat_m$BPMeds),]$BPMeds <- pred_BPMeds_train_m
-x.test_dat_m[ici(x.test_dat_m$BPMeds),]$BPMeds <- pred_BPMeds_test_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
-
-# We continue to do this with the last variable, education, which is a four-class variable. We use KNN.
-
-
-
-#---------------------------------------------------------------------------------------------------------------
-#-------------------------- Predicting and imputing new data for Education (Multiclass) ------------------------
-#---------------------------------------------------------------------------------------------------------------
-
-
-# We fit a KNN model for classification on the training set.
-
-fit_for_simp_edu_m <- gknn(education ~., data = x.train_dat_m)
-
-## --- Prediction --- 
-
-# Which should be predicted?
+# Pick out those variables with missing education from the training and test set.
 train_data_to_pred_edu_m = ic(x.train_dat_m)
 train_data_to_pred_edu_m = train_data_to_pred_edu_m[ici(train_data_to_pred_edu_m$education),]
-
 test_data_to_pred_edu_m = ic(x.test_dat_m)
 test_data_to_pred_edu_m = test_data_to_pred_edu_m[ici(test_data_to_pred_edu_m$education),]
 
+```
 
-# Predict them
+We predict new samples for the imputation.
+
+``` {r Missing Data predictions}
+
+# Predicting the values to impute for glucose on the training and test data.
+pred_glucose_train_m <- predict(fit_for_simp_glucose_m, newdata = train_data_to_pred_gluc_m) 
+pred_glucose_test_m <- predict(fit_for_simp_glucose_m, newdata = test_data_to_pred_gluc_m)
+
+# Predicting the values to impute for cigsPerDay on the training and test data.
+pred_cigs_train_m <- predict(fit_for_simp_cigs_m, newdata = train_data_to_pred_cigs_m) 
+pred_cigs_test_m <- predict(fit_for_simp_cigs_m, newdata = test_data_to_pred_cigs_m)
+
+# Predicting the values to impute for BMI on the training and test data.
+pred_BMI_train_m <- predict(fit_for_simp_BMI_m, newdata = train_data_to_pred_BMI_m) 
+pred_BMI_test_m <- predict(fit_for_simp_BMI_m, newdata = test_data_to_pred_BMI_m)
+
+# Predicting the values to impute for totChol on the training and test data.
+pred_totChol_train_m <- predict(fit_for_simp_totChol_m, newdata = train_data_to_pred_totChol_m) 
+pred_totChol_test_m <- predict(fit_for_simp_totChol_m, newdata = test_data_to_pred_totChol_m)
+
+# Predicting the values to impute for heartRate on the training and test data.
+pred_heartRate_train_m <- predict(fit_for_simp_heartRate_m, newdata = train_data_to_pred_heartRate_m) 
+pred_heartRate_test_m <- predict(fit_for_simp_heartRate_m, newdata = test_data_to_pred_heartRate_m)
+
+# Predicting the classes to impute for BPMeds on the training and test data by first predicting numerical values in (0,1) and then classifying these to either 0 or 1. 
+pred_BPMeds_train_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = train_data_to_pred_BPMeds_m, type = "response") 
+pred_BPMeds_test_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = test_data_to_pred_BPMeds_m, type = "response")
+pred_BPMeds_train_m <- ifelse(pred_BPMeds_train_m_probs >= 0.5, 1, 0)
+pred_BPMeds_test_m <- ifelse(pred_BPMeds_test_m_probs >= 0.5, 1, 0)
+
+# Predicting the classes to impute for education on the training and test data.
 pred_edu_train_m <- predict(fit_for_simp_edu_m, newdata = train_data_to_pred_edu_m, type = "class") 
 pred_edu_test_m <- predict(fit_for_simp_edu_m, newdata = test_data_to_pred_edu_m, type = "class")
 
-## --- Visuals ---
+```
 
-## Lets see what we predicted
+To see how our predictions (on the training data) compare to the complete case, we plot (in different ways) the predicted values/classes.
+For illustrating different types of plots, we plot glucose as a transparent histogram and as a point plot. 
 
-plot(x.train_dat_m$education)
-plot(pred_edu_train_m) # Seems like a reasonable (~ 1/41) was classified as 1, compared to the training data. 
+```{r Missing data train-pred-plots}
 
-## Add predictions into original data by changing those with incomplete education.
+# ---- Make transparent colors for plotting ----
+c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
+c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
 
+# ---- Make histogram objects for glucose ----
 
-x.train_dat_m[ici(x.train_dat_m$education),]$education <- pred_edu_train_m
-x.test_dat_m[ici(x.test_dat_m$education),]$education <- pred_edu_test_m
-
-md.pattern(x.train_dat_m)
-gg_miss_var(x.train_dat_m)
-
-md.pattern(x.test_dat_m)
-gg_miss_var(x.test_dat_m)
+# Histogram objects for glucose
+hg_pred_gluc = hist(pred_glucose_train_m, plot = FALSE)
+hg_old_gluc = hist(x.train_dat_m$glucose, plot = FALSE)
 
 
+# ---- Make point plots over indexes for all except education ----
+
+par(mfrow = c(2,3))
+
+# Point plot for glucose
+plot(x.train_dat_m$glucose, ylab = "Value of Glucose", main = "Glucose")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_glucose_train_m)),pred_glucose_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$glucose), col = "red")
+
+# Point plot for cigsperday
+plot(x.train_dat_m$cigs, ylab = "Value of cigsPerDay", main = "cigsPerDay")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_cigs_train_m)),pred_cigs_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$cigsPerDay), col = "red")
+
+# Point plot for BMI
+plot(x.train_dat_m$BMI, ylab = "Value of BMI", main = "BMI")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_BMI_train_m)),pred_BMI_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$BMI), col = "red")
+
+# Point plot for totChol
+plot(x.train_dat_m$totChol, ylab = "Value of totChol", main = "totChol")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_totChol_train_m)),pred_totChol_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$totChol), col = "red")
+
+# Point plot for heartRate
+plot(x.train_dat_m$heartRate, ylab = "Value of heartRate", main = "heartRate")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_heartRate_train_m)),pred_heartRate_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$heartRate), col = "red")
+
+# Point plot for BPMeds
+plot(x.train_dat_m$BPMeds, ylab = "Class of BPMeds", main = "BPMeds")
+points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_BPMeds_train_m)),pred_BPMeds_train_m, col = "orange", pch = 16)
+abline(h = mean(x.train_dat_m$BPMeds), col = "red")
+
+# ---- Make histogram plots for glucose and education ----
+
+par(mfrow = c(1,1))
+
+# Histogram plots for glucose
+plot(hg_old_gluc, col = c1, xlab = "Value of Glucose", main = "Glucose") # Plot 1st histogram using a transparent color
+plot(hg_pred_gluc, , col = c2, add = TRUE)
+legend("topright", legend=c("Observed - blue", "Predictions - pink"), cex=0.6)
+
+par(mfrow = c(1,2))
+
+# Histograms for education
+plot(x.train_dat_m$education, main = "Education - Observed", ylab = "Frequency")
+plot(pred_edu_train_m, main = "Education - Predicted", ylab = "Frequency")
 
 ```
 
-There are several steps in this procedure that could be improved upon. First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several models on the training set and done an evaluation procedure within the training set (e.g. cross validated optimization of ROC-AUC) to pick the models imputing each variable. 
+Lastly, we update our data with the newly imputed values.
 
-As mentioned, we did not include the response (TenYearCHD) in the regressions. It is not clear to us why it would be a better choice to include it. More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice.
+``` {r Missing Data imputation}
 
+# ---- Making new data sets based on the old ones ----
+x.train_imp = x.train_dat_m
+x.test_imp = x.test_dat_m
 
+# ---- We add the predictions to this data set. ----
+
+# Adding glucose
+x.train_imp[ici(x.train_imp$glucose),]$glucose <- pred_glucose_train_m
+x.test_imp[ici(x.test_imp$glucose),]$glucose <- pred_glucose_test_m
+
+# Adding cigsPerDay
+x.train_imp[ici(x.train_imp$cigsPerDay),]$cigsPerDay <- pred_cigs_train_m
+x.test_imp[ici(x.test_imp$cigsPerDay),]$cigsPerDay <- pred_cigs_test_m
+
+# Adding BMI
+x.train_imp[ici(x.train_imp$BMI),]$BMI <- pred_BMI_train_m
+x.test_imp[ici(x.test_imp$BMI),]$BMI <- pred_BMI_test_m
+
+# Adding totChol
+x.train_imp[ici(x.train_imp$totChol),]$totChol <- pred_totChol_train_m
+x.test_imp[ici(x.test_imp$totChol),]$totChol <- pred_totChol_test_m
+
+# Adding heartRate
+x.train_imp[ici(x.train_imp$heartRate),]$heartRate <- pred_heartRate_train_m
+x.test_imp[ici(x.test_imp$heartRate),]$heartRate <- pred_heartRate_test_m
+
+# Adding BPMeds
+x.train_imp[ici(x.train_imp$BPMeds),]$BPMeds <- pred_BPMeds_train_m
+x.test_imp[ici(x.test_imp$BPMeds),]$BPMeds <- pred_BPMeds_test_m
+
+# Adding education
+x.train_imp[ici(x.train_imp$education),]$education <- pred_edu_train_m
+x.test_imp[ici(x.test_imp$education),]$education <- pred_edu_test_m
+
+```
+
+We should by now have obtained completely imputed data sets. 
+To see this, we consider the missing data patterns of the newly constructed data sets.
+
+``` {r Missing data final}
+
+# For training data
+md.pattern(x.train_imp)
+gg_miss_var(x.train_imp)
+
+# For test data
+md.pattern(x.test_imp)
+gg_miss_var(x.test_imp)
+
+```
+
+There are several steps in this procedure that could be improved. 
+
+First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several different models on the training set and done evaluation procedures within the training set (e.g. cross validated optimization of ROC-AUC) to pick the models before fixing a model to impute each variable. 
+
+Some variables, such as cigsPerDay, are in some sense discrete, although we have treated them as continuous (as it is possible to smoke e.g. $2,73$ cigaretts per day). These could have been rounded off to integers, but we didn't see why this would be necessary. 
+We did not include the response (TenYearCHD) in the regressions. 
+It is not clear to us why it would be a better choice to include it, as we don't want the imputed data to be overfitted towards the response.
+We could might as well have included the response, if we wanted. 
+More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice.
+
+The imputation was not done using the functions from the MICE package.
+This is partially because we wanted to get our hands dirty and do it ourselves (for practice) and partially because we couldn't figure out how to use MICE to train a regression model on the training set and predict values on the test set using the same regression model.
 
 # Model
 
