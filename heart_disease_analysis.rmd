@@ -88,76 +88,24 @@ ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
 
 To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference (as Rubins rules are not clear on how to treat Lasso/Ridge/elNet or something? Recall what Mette said )
 
-The single imputation technique we will use is simply to 
+The single imputation technique we will use is simply regression imputation, where we adapt our regression technique depending on the type of variable imputed. For continuous variables, we simply use a linear regression model. For binary variables, we use logistic regression to classify their values, and for the variable "education", which is a four-class variable, we have utilized kNN for multiclass imputation. 
 
-```{r MD shit version}
-#----------------------------------------------------------------
-### -------- Trying to just split, predict and go for it --------
-#----------------------------------------------------------------
+To avoid encountering observations with more than one missing value, and hence problems with regressing, we remove all samples with more than one NA. 
 
-# Split into training and test data
-
-#Which should go where?
-dim_data = dim(data)[1]
-size_split = dim_data-round(dim_data/5)
-spl_dat = sample(1:dim_data, size = size_split)
-
-train_data = data[spl_dat,]
-test_data = data[-spl_dat,]
-
-# In CC, we did something like this, but I think modmat does not handle NA's, yielding out of bounds subscripts.
-              # X_dat = model.matrix(TenYearCHD ~  ., data = data)[,-1]           # Removes the intercept? Where did this come from?
-
-# This below here is a fixed version of the code, as we may want to predict using the covariates only, not the response.
-X_dat = data[,-dim(data)[2]] # Remove the column with response?
-x.train_dat = X_dat[spl_dat,]
-x.test_dat = X_dat[-spl_dat,]
-y.train_dat = data$TenYearCHD[spl_dat]
-y.test_dat = data$TenYearCHD[-spl_dat]
-
-
-
-#We fit a linear model on the training set.
-
-# QUESTION: Should the response (TenYearCHD) be included here?
-
-fit_for_simp_glucose <- lm(glucose ~., data = x.train_dat)
-
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_glucose)
-
-# Prediction 
-
-
-### ----------PRoblem though. We have 61 samples with more than one covariate missing. How do we make many such models? ---------
-        # ^ Can we just yeet them and work with 61 less samples? 
-          # We get indices that dont match up, ripp.
-
-#Predicting new glucose data.
-pred_glucose_train <- predict(fit_for_simp_glucose, newdata = ic(x.train_dat)) 
-pred_glucose_test <- predict(fit_for_simp_glucose, newdata = ic(x.test_dat)) #ic = incomplete cases   #ici = incomplete case indicator
-
-```
-
-
+Our data is split into training and test sets, of sizes approximately $80%$ and $20%$ of the original dataset, respectively.
+In order to avoid data leakage in our imputation if the test set, we fit the imputation models on the training set.
+Note that we do not include the response (TenYearCHD) in the regression, and in order to avoid too much correlation between the imputed samples, we always base the regression models on the complete case data, instead of letting the imputed values for variable $n$ regress to impute variable $n+1$.  
 
 
 ```{r Missing Data}
-# Todo: 
-# Set seed
-# Split into training and test data
-# Train imputation model explicitly on training data
-# Predict values with the same model on the test data and use this as new test.
 
 # Setting seed expressing our love for MA8701
 set.seed(8701)
 
 
-
-#--------------------------------------------------------------------------------------------------------
-# ---------------------- Removing all samples that have more than one covariate missing -----------------
-# ---------------------- and trying again, hopefully with better results --------------------------------
-#--------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+# Removing all samples that have more than one covariate missing and trying again, hopefully with better results
+#---------------------------------------------------------------------------------------------------------------
 
 # Throwing out the samples with two or more NAs from the data
 miss <- c()
@@ -169,7 +117,7 @@ for(i in 1:nrow(data)) {
 
 data2 <- data[-miss,]
 
-length(miss) # This number should be 61 if done correctly (61 came from manually counting)
+# length(miss) # This number should be 61 if done correctly (61 came from manually counting in the md.pattern-plot below)
 
 # Exploring data2
 
@@ -178,9 +126,12 @@ gg_miss_var(data2)
 
 
 
-#---------------Split into training and test data------------------------------------------------------ 
+#---------------------------------------------------------------------------------------------------------------
+#--------------------------------Split into training and test data---------------------------------------------- 
+#---------------------------------------------------------------------------------------------------------------
 
-#Which should go where?
+
+# Assigning which values should go where by randomly sampling ~20% of the indices. 
 dim_data2 = dim(data2)[1]
 size_split2 = dim_data2-round(dim_data2/5)
 spl_dat2 = sample(1:dim_data2, size = size_split2)
@@ -198,41 +149,43 @@ y.train_dat2 = data2$TenYearCHD[spl_dat2]
 y.test_dat2 = data2$TenYearCHD[-spl_dat2]
 
 
-#-------------------------- Predicting and imputing new glucose data ---------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#------------------------------ Predicting and imputing new glucose data ---------------------------------------
+#---------------------------------------------------------------------------------------------------------------
 
 # We fit a linear model on the training set.
 
-fit_for_simp_glucose_2 <- lm(glucose ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+fit_for_simp_glucose_2 <- lm(glucose ~., data = x.train_dat2)
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_glucose_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation. 
+# summary(fit_for_simp_glucose_2)
 
-# Prediction 
+## --- Prediction --- 
 
-# Which should be predicted?
+# Which should be predicted? # Pick out those variables with missing glucose values that we want to impute. 
 train_data_to_pred_gluc_2 = ic(x.train_dat2)
-train_data_to_pred_gluc_2 = train_data_to_pred_gluc_2[ici(train_data_to_pred_gluc_2$glucose),]
+train_data_to_pred_gluc_2 = train_data_to_pred_gluc_2[ici(train_data_to_pred_gluc_2$glucose),] 
 
 test_data_to_pred_gluc_2 = ic(x.test_dat2)
 test_data_to_pred_gluc_2 = test_data_to_pred_gluc_2[ici(test_data_to_pred_gluc_2$glucose),]
 
 
-# Predict them
+# Predict the variables with missing glucose values that we want to impute. 
 pred_glucose_train_2 <- predict(fit_for_simp_glucose_2, newdata = train_data_to_pred_gluc_2) 
 pred_glucose_test_2 <- predict(fit_for_simp_glucose_2, newdata = test_data_to_pred_gluc_2)
 
 
+## --- Visuals ---
 
-## Lets see what we predicted
+# Lets see what we predicted, using base plot. 
 
 plot(x.train_dat2$glucose)
 plot(pred_glucose_train_2)
 
-# Make histogram objects
+# Can also do this by making histogram objects
 
 hg_pred_gluc = hist(pred_glucose_train_2, plot = FALSE)
 hg_old_gluc = hist(x.train_dat2$glucose, plot = FALSE)
-
 
 # Make transparent colors
 c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
@@ -249,6 +202,8 @@ plot(hg_pred_gluc, , col = c2, add = TRUE)
 x.train_dat2[ici(x.train_dat2$glucose),]$glucose <- pred_glucose_train_2
 x.test_dat2[ici(x.test_dat2$glucose),]$glucose <- pred_glucose_test_2
 
+# Run these to see that we eliminated the missing variables.
+
 md.pattern(x.train_dat2)
 gg_miss_var(x.train_dat2)
 
@@ -256,11 +211,7 @@ md.pattern(x.test_dat2)
 gg_miss_var(x.test_dat2)
 
 
-#------We continue to do this with the other cont. variables {Cigs per day, BMI, TotChol, HR (only for training data)}, based on the original complete case----
-# Could discuss whether or not this is the right approach, but we don't want to correlate the data even more, and therfore we don't base
-# the prediction of cigs, BMI, etc... on the newly predicted glucose data and whatnot. Keep it simple with the old training data. 
-
-
+# We continue to do this with the other cont. variables {Cigs per day, BMI, TotChol, HR (only for training data)}, based on the original complete case.
 
 
 #-------------------------- Predicting and imputing new data for Cigs Per Day ---------------------------------
@@ -270,14 +221,14 @@ gg_miss_var(x.test_dat2)
 
 # We fit a linear model on the training set.
 
-fit_for_simp_cigs_2 <- lm(cigsPerDay ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+fit_for_simp_cigs_2 <- lm(cigsPerDay ~., data = x.train_dat2)
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_cigs_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation. 
+# summary(fit_for_simp_cigs_2)
 
-# Prediction 
+## --- Prediction --- 
 
-# Which should be predicted?
+# Which should be predicted? # Pick out those variables with missing glucose values that we want to impute. 
 train_data_to_pred_cigs_2 = ic(x.train_dat2)
 train_data_to_pred_cigs_2 = train_data_to_pred_cigs_2[ici(train_data_to_pred_cigs_2$cigsPerDay),]
 
@@ -285,11 +236,12 @@ test_data_to_pred_cigs_2 = ic(x.test_dat2)
 test_data_to_pred_cigs_2 = test_data_to_pred_cigs_2[ici(test_data_to_pred_cigs_2$cigsPerDay),]
 
 
-# Predict them
+# Predict the variables with missing glucose values that we want to impute.
 pred_cigs_train_2 <- predict(fit_for_simp_cigs_2, newdata = train_data_to_pred_cigs_2) 
 pred_cigs_test_2 <- predict(fit_for_simp_cigs_2, newdata = test_data_to_pred_cigs_2)
 
 
+## --- Visuals ---
 
 ## Lets see what we predicted
 
@@ -306,7 +258,7 @@ plot(hg_old_cigs, col = c1) # Plot 1st histogram using a transparent color
 plot(hg_pred_cigs, , col = c2, add = TRUE)
 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete cigsPerDay
 
 
 x.train_dat2[ici(x.train_dat2$cigsPerDay),]$cigsPerDay <- pred_cigs_train_2
@@ -330,10 +282,10 @@ gg_miss_var(x.test_dat2)
 
 fit_for_simp_BMI_2 <- lm(BMI ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_BMI_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
+# summary(fit_for_simp_BMI_2)
 
-# Prediction 
+## --- Prediction --- 
 
 # Which should be predicted?
 train_data_to_pred_BMI_2 = ic(x.train_dat2)
@@ -348,6 +300,8 @@ pred_BMI_train_2 <- predict(fit_for_simp_BMI_2, newdata = train_data_to_pred_BMI
 pred_BMI_test_2 <- predict(fit_for_simp_BMI_2, newdata = test_data_to_pred_BMI_2)
 
 
+
+## --- Visuals ---
 
 ## Lets see what we predicted
 
@@ -364,7 +318,7 @@ plot(hg_old_BMI, col = c1) # Plot 1st histogram using a transparent color
 plot(hg_pred_BMI, col = c2, add = TRUE)
 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete BMI
 
 
 x.train_dat2[ici(x.train_dat2$BMI),]$BMI <- pred_BMI_train_2
@@ -388,10 +342,10 @@ gg_miss_var(x.test_dat2)
 
 fit_for_simp_totChol_2 <- lm(totChol ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_totChol_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
+# summary(fit_for_simp_totChol_2)
 
-# Prediction 
+## --- Prediction --- 
 
 # Which should be predicted?
 train_data_to_pred_totChol_2 = ic(x.train_dat2)
@@ -406,6 +360,7 @@ pred_totChol_train_2 <- predict(fit_for_simp_totChol_2, newdata = train_data_to_
 pred_totChol_test_2 <- predict(fit_for_simp_totChol_2, newdata = test_data_to_pred_totChol_2)
 
 
+## --- Visuals ---
 
 ## Lets see what we predicted
 
@@ -422,7 +377,7 @@ plot(hg_old_totChol, col = c1) # Plot 1st histogram using a transparent color
 plot(hg_pred_totChol, col = c2, add = TRUE)
 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete TotChol
 
 
 x.train_dat2[ici(x.train_dat2$totChol),]$totChol <- pred_totChol_train_2
@@ -446,10 +401,10 @@ gg_miss_var(x.test_dat2)
 
 fit_for_simp_heartRate_2 <- lm(heartRate ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_heartRate_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
+# summary(fit_for_simp_heartRate_2)
 
-# Prediction 
+## --- Prediction --- 
 
 # Which should be predicted?
 train_data_to_pred_heartRate_2 = ic(x.train_dat2)
@@ -459,7 +414,7 @@ train_data_to_pred_heartRate_2 = train_data_to_pred_heartRate_2[ici(train_data_t
 # Predict
 pred_heartRate_train_2 <- predict(fit_for_simp_heartRate_2, newdata = train_data_to_pred_heartRate_2) 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete HR
 
 
 x.train_dat2[ici(x.train_dat2$heartRate),]$heartRate <- pred_heartRate_train_2
@@ -483,10 +438,10 @@ gg_miss_var(x.test_dat2)
 
 fit_for_simp_BPMeds_2 <- glm(BPMeds ~., data = x.train_dat2, family = "binomial") # Q: Should the response be included? Open question :( We think no. Argue why later!
 
-# Checking if this is good. It is not. Adjusted R^2 is totally balls.
-summary(fit_for_simp_BPMeds_2)
+# Checking if this is good. It is not necessarily good, as R^2 is low, but since R^2 is positive, we are probably doing better than mean imputation.
+# summary(fit_for_simp_BPMeds_2)
 
-# Prediction 
+## --- Prediction --- 
 
 # Which should be predicted?
 train_data_to_pred_BPMeds_2 = ic(x.train_dat2)
@@ -504,6 +459,8 @@ pred_BPMeds_train_2 <- ifelse(pred_BPMeds_train_2_probs >= 0.5, 1, 0)
 pred_BPMeds_test_2 <- ifelse(pred_BPMeds_test_2_probs >= 0.5, 1, 0)
 
 
+## --- Visuals ---
+
 ## Lets see what we predicted
 
 plot(x.train_dat2$BPMeds)
@@ -519,7 +476,7 @@ plot(hg_old_BPMeds, col = c1) # Plot 1st histogram using a transparent color
 plot(hg_pred_BPMeds, col = c2, add = TRUE)
 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete BPMeds
 
 
 x.train_dat2[ici(x.train_dat2$BPMeds),]$BPMeds <- pred_BPMeds_train_2
@@ -538,16 +495,11 @@ gg_miss_var(x.test_dat2)
 
 #-------------------------- Predicting and imputing new data for Education (Multiclass) ---------------------------------
 
-?gknn
-
 # We fit a KNN model for classification on the training set.
 
-fit_for_simp_edu_2 <- gknn(education ~., data = x.train_dat2) # Q: Should the response be included? Open question :( We think no. Argue why later!
+fit_for_simp_edu_2 <- gknn(education ~., data = x.train_dat2)
 
-# Checking if this is good. Idk? Not understandable when using KNN.
-summary(fit_for_simp_edu_2)
-
-# Prediction 
+## --- Prediction --- 
 
 # Which should be predicted?
 train_data_to_pred_edu_2 = ic(x.train_dat2)
@@ -557,17 +509,18 @@ test_data_to_pred_edu_2 = ic(x.test_dat2)
 test_data_to_pred_edu_2 = test_data_to_pred_edu_2[ici(test_data_to_pred_edu_2$education),]
 
 
-# Predict them (first numerically in (0,1), then classify to 0 or 1 depending on value)
+# Predict them
 pred_edu_train_2 <- predict(fit_for_simp_edu_2, newdata = train_data_to_pred_edu_2, type = "class") 
 pred_edu_test_2 <- predict(fit_for_simp_edu_2, newdata = test_data_to_pred_edu_2, type = "class")
 
+## --- Visuals ---
 
 ## Lets see what we predicted
 
 plot(x.train_dat2$education)
 plot(pred_edu_train_2) # Seems like a reasonable (~ 1/41) was classified as 1, compared to the training data. 
 
-## Add predictions into original data by changing those with incomplete glucose
+## Add predictions into original data by changing those with incomplete education.
 
 
 x.train_dat2[ici(x.train_dat2$education),]$education <- pred_edu_train_2
@@ -582,6 +535,10 @@ gg_miss_var(x.test_dat2)
 
 
 ```
+
+There are several steps in this procedure that could be improved upon. First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several models on the training set and done an evaluation procedure within the training set (e.g. crossvalidated optimization of ROC-AUC) to pick the models imputing each variable. 
+
+As mentioned, we did not include the response (TenYearCHD) in the regressions. It is not clear to us why it would be a better choice to include it. More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice.
 
 
 
