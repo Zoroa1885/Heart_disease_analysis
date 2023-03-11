@@ -27,6 +27,8 @@ library(caret)
 library(ggcorrplot)
 library(ggplot2)
 library(e1071) #If we use KNN for imputation of education (multiclass)
+library(pROC)
+library(caret)
 ```
 
 # Introduction
@@ -64,7 +66,6 @@ The next thing we looked at was the number of missing data in our data set.
 # Look at the missing data
 md_mat = md.pattern(data, rotate.names = T, plot = T) # Can we make these plots prettier?
 gg_miss_var(data)
-
 ```
 
 
@@ -160,7 +161,7 @@ gg_miss_var(data_m)
 We further split the data into a training and test set, following the training-test-ratio that we have previously set.
 
 ``` {r Missing data split}
-
+tr = 7/10
 # Assigning which values should go where by randomly sampling the indices. 
 dim_data_m = dim(data_m)[1]
 size_split_m = round(dim_data_m*tr)
@@ -428,16 +429,17 @@ In the model section we will consider two data sets: the complete case and imput
 
 ```{r complete train test}
 # Split the complete data into training and test
+set.seed(8701)
 tr = 7/10 # train ratio
 r = dim(df_complete)[1]
 size = round(r*tr)
 train = sample(1:r,size = size)
-X = model.matrix(TenYearCHD ~  ., data = df_complete)[,-1] # Remove the response
+
+X = model.matrix(TenYearCHD ~  .-1, data = df_complete) 
 x.train_c = scale(X[train,])
 x.test_c = scale(X[-train,])
 y.train_c = df_complete$TenYearCHD[train]
 y.test_c = df_complete$TenYearCHD[-train]
-
 
 ```
 
@@ -452,24 +454,55 @@ summary(mod0)
 
 The logistic regression model chooses `r names(coefficients(mod0))[c(1,2,3,5,8,13,14,18)]` as the significant covariates. 
 
+```{r}
+df.test <- df_complete[-train,]
+
+mod0_preds <- predict(mod0, newdata = df.test, type = "response")
+
+sum(round(mod0_preds) == 1)
+
+predicted_value <- factor(round(mod0_preds))
+expected_value <- factor(df.test$TenYearCHD)
+
+confusionMatrix(data=predicted_value, reference = expected_value)$table
+
+roc_obj <- roc(df.test$TenYearCHD, mod0_preds)
+auc(roc_obj)
+```
+
+
 ## Lasso on Complete Case 
 
 Next we wish to do.
 ```{r Lasso}
 
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, alpha = 1)
+cv.out = cv.glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
-lasso_mod = glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, alpha = 1,  lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 ``` 
+Prediction
+```{r}
+lasso_preds <- predict(lasso_mod, newx = x.test_c, type = "response",  s = cv.out$lambda.1se)
 
+sum(round(lasso_preds) == 1)
 
+predicted_value <- factor(round(lasso_preds))
+expected_value <- factor(y.test_c)
+
+confusionMatrix(data=predicted_value, reference = expected_value)$table
+
+roc_obj_lasso <- roc(y.test_c, lasso_preds)
+auc(roc_obj_lasso)
+```
+
+Bootstrapping
 ```{r Bootstrap Lasso}
 B = 500
 
@@ -493,6 +526,30 @@ barplot(apply(B_coef_count, 2, sum)/B)
 ```
 
 ## Lasso on Imputed Data
+Prepering data
+```{r}
+response <- "TenYearCHD"
+
+X <- model.matrix(~.-1, data)
+X_train <- X[train,]
+X_test <- X[-train,]
+
+imp_train <- mice(X_train, method = "norm.predict", m = 1)
+imp_test <- mice(X_test, method = "norm.predict", m = 1)
+
+x.train_imp <- complete(imp_train)
+x.test_imp <- complete(imp_test)
+
+y.train_imp <- x.train_imp[response]
+x.train_imp[response] <- NULL
+
+y.test_imp <- x.test_imp[response]
+x.test_imp[response] <- NULL
+
+
+md.pattern(x.train_imp, rotate.names = TRUE)
+```
+
 
 
 # Inference
