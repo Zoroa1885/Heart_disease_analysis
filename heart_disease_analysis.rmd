@@ -566,7 +566,8 @@ cv.out$lambda.min
 cv.out$lambda.1se
 ```
 ```{r}
-lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
+# We need to standardize the matrix so that we can drop intercepts.
+lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1, intercept = F, standardize=TRUE,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
@@ -574,41 +575,65 @@ lasso_coef[,1]
 The model drops no variables, which is very worrisome. We check the predictive power of the model to see if this makes the model worse 
 
 ```{r}
-lasso_preds <- predict(lasso_mod, newx = x.test_c, type = "response",  s = cv.out$lambda.1se)
-
-sum(round(lasso_preds) == 1)
+lasso_preds <- predict(lasso_mod, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_preds))
-expected_value <- factor(y.test_c)
+expected_value <- factor(y.test)
 
 confusionMatrix(data=predicted_value, reference = expected_value)$table
 
-roc_obj_lasso <- roc(y.test_c, lasso_preds)
+roc_obj_lasso <- roc(y.test, lasso_preds)
 auc(roc_obj_lasso)
 ```
-The model performs significantly worse!
+The model performs significantly worse! It looks like the model uses variables like education as a proxy for a intercept, so we make a model with intercept to negate this effect
+```{r First Imputed Lasso model}
+cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", alpha = 1)
+plot(cv.out$glmnet.fit, "lambda", label=F)
+plot(cv.out)
+cv.out$lambda.min
+cv.out$lambda.1se
+```
 
+```{r}
+# We need to standardize the matrix so that we can drop intercepts.
+lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1,  lasso = cv.out$lambda.1se)
+
+lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
+lasso_coef[,1]
+```
+This time, the lasso drops most variables, like it did in the complete case.
+```{r}
+lasso_preds <- predict(lasso_mod, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
+
+predicted_value <- factor(round(lasso_preds))
+expected_value <- factor(y.test)
+
+confusionMatrix(data=predicted_value, reference = expected_value)$table
+
+roc_obj_lasso <- roc(y.test, lasso_preds)
+auc(roc_obj_lasso)
+```
+The predictive performance is improved, but still worse than the complete case. This is probably because the model performs worse on data points with imputed values, since these values might not correlate correctly with the response.
 ### Specifying imputation methods
 
-Specifying imputation methods. First we check what mice already uses.
-```{r}
+```{r Check what mice already uses}
 init = mice(data, maxit = 0)
 meth = init$method
+meth <- meth[-16] #Remove response
 meth
 ```
-Mice uses polyreg for the factor variable and predictive mean matching (pmm) for all other. Check data type
-```{r}
+Mice uses polyreg for the factor variable and predictive mean matching (pmm) for all other.
+```{r Check data type}
 types = sapply(data, class)
 types
 ```
-Check number of unique
-```{r}
+```{r Check number of unique}
 n_unique = sapply(data, function(x) length(unique(x)))
 n_unique
 ```
 We can use logreg for BPMeds - since it is binary -, polyreg for education and linear regression for all other columns with missing 
 
-```{r}
+```{r Specify new imputation methods}
 meth["BPMeds"] <- "logreg"
 meth["totChol"] <- "norm.predict"
 meth["BMI"] <- "norm.predict"
@@ -628,88 +653,35 @@ x.train_imp_s <- model.matrix(~.-1, data = data_train_imp_specified)
 x.test_imp_S <- model.matrix(~.-1, data = data_test_imp_specified)
 ```
 
-
-
-```{r}
-response <- "TenYearCHD"
-
-set.seed(8701)
-tr = 7/10 # train ratio
-r = dim(data)[1]
-size = round(r*tr)
-train = sample(1:r,size = size)
-
-n_unique = sapply(data, function(x) length(unique(x)))
-
-data <- data %>%
-  mutate(education = as.factor(education))
-  
-init = mice(data, maxit = 0)
-meth = init$method
-predMat = init$predictorMatrix
-types = sapply(data, class)
-
-predMat["TenYearCHD"] <- 0
-
-imp = mice(data, m=1)
-data_imp = complete(imp)
-md.pattern(data_imp)
-
-imp = mice(data, method = meth, predictorMatrix = predMat, m = 1)
-
-
-X_train <- data[train,]
-X_train[response] <- NULL
-
-X_test <- data[-train,]
-X_test[response] <- NULL
-
-y.train <- data[response][train,]
-y.test <- data[response][-train,]
-
-imp_train <- mice(X_train, method = "norm.predict", m = 1)
-imp_test <- mice(X_test, method = "norm.predict", m = 1)
-
-x.train_imp <- complete(imp_train)
-dim(x.train_imp)
-?model.matrix
-x.train_imp <- model.matrix(~.-1, x.train_imp)
-dim(x.train_imp)
-
-x.test_imp <- complete(imp_test)
-x.test_imp <- model.matrix(~.-1, x.test_imp)
-
-md.pattern(x.train_imp, rotate.names = TRUE)
-```
-
 ```{r Lasso Imputed, eval = F}
 
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+cv.out = cv.glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
-lasso_mod_imp = glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
-
-lasso_imp_coef <- coef(lasso_mod_imp, s=cv.out$lambda.1se)
-lasso_imp_coef[,1]
 ``` 
+```{r}
+lasso_mod_imp_s = glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1,  lasso = cv.out$lambda.1se)
+
+lasso_imp_coef <- coef(lasso_mod_imp_s, s=cv.out$lambda.1se)
+lasso_imp_coef[,1]
+```
+
 
 ```{r}
-lasso_imp_preds <- predict(lasso_mod_imp, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
-length(lasso_imp_preds)
-sum(round(lasso_imp_preds) == 1)
+lasso_imp_preds <- predict(lasso_mod_imp_s, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_imp_preds))
 expected_value <- factor(y.test)
-length(expected_value)
 
 confusionMatrix(data=predicted_value, reference = expected_value)$table
 
 roc_obj_lasso <- roc(y.test, lasso_preds)
 auc(roc_obj_lasso)
 ```
+Does not change the predictive performance.
 # Inference
 
 In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping iteration in last section, and now use the test data to fit a logistic model to avoid overfitting. 
