@@ -526,32 +526,131 @@ barplot(apply(B_coef_count, 2, sum)/B)
 ```
 
 ## Lasso on Imputed Data
-Prepering data
+
+### Normal imputation with mice
 ```{r}
 response <- "TenYearCHD"
 
-X <- model.matrix(~.-1, data)
-X_train <- X[train,]
-X_test <- X[-train,]
+set.seed(8701)
+tr = 7/10 # train ratio
+r = dim(data)[1]
+size = round(r*tr)
+train = sample(1:r,size = size)
+
+data <- data %>%
+  mutate(education = as.factor(education))
+
+data_train <- data[train,]
+data_test <- data[-train,]
+
+imp_train = mice(data_train, m=1)
+data_train_imp = complete(imp_train)
+
+imp_test = mice(data_test, m=1)
+data_test_imp = complete(imp_test)
+
+```
+
+### First Imputed Lasso model
+
+Specifying imputation methods. First we check what mice allready uses.
+```{r}
+init = mice(data, maxit = 0)
+meth = init$method
+meth
+```
+Check data type
+```{r}
+types = sapply(data, class)
+types
+```
+Check number of unique
+```{r}
+n_unique = sapply(data, function(x) length(unique(x)))
+n_unique
+```
+
+
+```{r}
+response <- "TenYearCHD"
+
+set.seed(8701)
+tr = 7/10 # train ratio
+r = dim(data)[1]
+size = round(r*tr)
+train = sample(1:r,size = size)
+
+n_unique = sapply(data, function(x) length(unique(x)))
+
+data <- data %>%
+  mutate(education = as.factor(education))
+  
+init = mice(data, maxit = 0)
+meth = init$method
+predMat = init$predictorMatrix
+types = sapply(data, class)
+
+predMat["TenYearCHD"] <- 0
+
+imp = mice(data, m=1)
+data_imp = complete(imp)
+md.pattern(data_imp)
+
+imp = mice(data, method = meth, predictorMatrix = predMat, m = 1)
+
+
+X_train <- data[train,]
+X_train[response] <- NULL
+
+X_test <- data[-train,]
+X_test[response] <- NULL
+
+y.train <- data[response][train,]
+y.test <- data[response][-train,]
 
 imp_train <- mice(X_train, method = "norm.predict", m = 1)
 imp_test <- mice(X_test, method = "norm.predict", m = 1)
 
 x.train_imp <- complete(imp_train)
+dim(x.train_imp)
+?model.matrix
+x.train_imp <- model.matrix(~.-1, x.train_imp)
+dim(x.train_imp)
+
 x.test_imp <- complete(imp_test)
-
-y.train_imp <- x.train_imp[response]
-x.train_imp[response] <- NULL
-
-y.test_imp <- x.test_imp[response]
-x.test_imp[response] <- NULL
-
+x.test_imp <- model.matrix(~.-1, x.test_imp)
 
 md.pattern(x.train_imp, rotate.names = TRUE)
 ```
 
+```{r Lasso Imputed, eval = F}
 
+# Use cross-validation to find lambda
+cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+plot(cv.out$glmnet.fit, "lambda", label=F)
+plot(cv.out)
+cv.out$lambda.min
+cv.out$lambda.1se
+lasso_mod_imp = glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
+lasso_imp_coef <- coef(lasso_mod_imp, s=cv.out$lambda.1se)
+lasso_imp_coef[,1]
+``` 
+
+```{r}
+lasso_imp_preds <- predict(lasso_mod_imp, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
+length(lasso_imp_preds)
+sum(round(lasso_imp_preds) == 1)
+
+predicted_value <- factor(round(lasso_imp_preds))
+expected_value <- factor(y.test)
+length(expected_value)
+
+confusionMatrix(data=predicted_value, reference = expected_value)$table
+
+roc_obj_lasso <- roc(y.test, lasso_preds)
+auc(roc_obj_lasso)
+```
 # Inference
 
 In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping iteration in last section, and now use the test data to fit a logistic model to avoid overfitting. 
