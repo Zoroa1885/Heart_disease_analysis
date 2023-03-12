@@ -713,8 +713,9 @@ for (i in 1:B){
 }
 
 colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
-boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55))
-
+boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55), las = 2)
+```
+```{r}
 B_coef_count = ifelse(B_coef == 0,0,1)
 barplot(apply(B_coef_count, 2, sum)/B, las=2)
 ```
@@ -727,8 +728,6 @@ In order to do inference we simply fit a logistic regression model using the `gl
 mod <- glm(TenYearCHD ~ 1 + age + male + sysBP, data = df_complete[-train,], family = binomial())
 
 confint(mod)
-
-
 
 confint(mod0)
 
