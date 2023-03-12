@@ -474,7 +474,7 @@ auc(roc_obj)
 ## Lasso on Complete Case 
 
 Next we wish to do.
-```{r Lasso}
+```{r Lasso CV}
 
 # Use cross-validation to find lambda
 cv.out = cv.glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
@@ -482,13 +482,15 @@ plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
+``` 
+```{r Lasso Model}
 lasso_mod = glmnet(x.train_c, y.train_c, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
-``` 
-Prediction
-```{r}
+```
+
+```{r Lasso Prediction}
 lasso_preds <- predict(lasso_mod, newx = x.test_c, type = "response",  s = cv.out$lambda.1se)
 
 sum(round(lasso_preds) == 1)
@@ -522,7 +524,7 @@ boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55))
 
 B_coef_count = ifelse(B_coef == 0,0,1)
 apply(B_coef_count, 2, sum)
-barplot(apply(B_coef_count, 2, sum)/B)
+barplot(apply(B_coef_count, 2, sum)/B, las = 2)
 ```
 
 ## Lasso on Imputed Data
@@ -559,14 +561,14 @@ x.test_imp <- model.matrix(~.-1, data = data_test_imp)
 
 
 ```{r First Imputed Lasso model}
+# We need to standardize the matrix so that we can drop intercepts.
 cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 ```
-```{r}
-# We need to standardize the matrix so that we can drop intercepts.
+```{r Imputed Lasso Model}
 lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1, intercept = F, standardize=TRUE,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
@@ -627,6 +629,7 @@ Mice uses polyreg for the factor variable and predictive mean matching (pmm) for
 types = sapply(data, class)
 types
 ```
+
 ```{r Check number of unique}
 n_unique = sapply(data, function(x) length(unique(x)))
 n_unique
@@ -653,7 +656,7 @@ x.train_imp_s <- model.matrix(~.-1, data = data_train_imp_specified)
 x.test_imp_S <- model.matrix(~.-1, data = data_test_imp_specified)
 ```
 
-```{r Lasso Imputed, eval = F}
+```{r Lasso Imputed With new methods}
 
 # Use cross-validation to find lambda
 cv.out = cv.glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1)
@@ -662,6 +665,7 @@ plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 ``` 
+
 ```{r}
 lasso_mod_imp_s = glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1,  lasso = cv.out$lambda.1se)
 
@@ -712,8 +716,7 @@ colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
 boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55))
 
 B_coef_count = ifelse(B_coef == 0,0,1)
-apply(B_coef_count, 2, sum)
-barplot(apply(B_coef_count, 2, sum)/B)
+barplot(apply(B_coef_count, 2, sum)/B, las=2)
 ```
 
 # Inference
