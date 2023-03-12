@@ -689,7 +689,7 @@ Does not change the predictive performance.
 
 ### Bootstrapping
 
-```{r Bootstrap Lasso}
+```{r Bootstrap Lasso with imputation in boot, eval = F}
 set.seed(8701)
 B = 500
 size = dim(data)[1]
@@ -720,6 +720,37 @@ B_coef_count = ifelse(B_coef == 0,0,1)
 barplot(apply(B_coef_count, 2, sum)/B, las=2)
 ```
 
+```{r ootstrap Lasso with imputation outside boot, eval = F}
+set.seed(8701)
+B = 500
+size = dim(data_train_imp)[1]
+
+B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
+for (i in 1:B){
+  boot_ind = sample(1:size, size = size, replace = TRUE)
+  data_b = data_train_imp[boot_ind,]
+  
+  x = model.matrix(~.-1, data = data_b)
+  y = y.train[boot_ind]
+  
+  cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
+  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+
+  B_coef[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
+}
+
+colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
+boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55), las = 2)
+```
+```{r}
+B_coef_count = ifelse(B_coef == 0,0,1)
+barplot(apply(B_coef_count, 2, sum)/B, las=2)
+```
+The result form the imputed data set is quite different from that of the non-imputed one. We might considder to use all coeficients which used in over 50% of the models, which is in this case 
+```{r}
+names(apply(B_coef_count, 2, sum)/B)[apply(B_coef_count, 2, sum)/B > 0.5]
+```
+
 # Inference
 
 In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping iteration in last section, and now use the test data to fit a logistic model to avoid overfitting. 
@@ -732,6 +763,15 @@ confint(mod)
 confint(mod0)
 
 ```
+```{r Inference for imputed data}
+data_test_imp["TenYearCHD"] <- y.test
+mod <- glm(TenYearCHD ~ 1+age + male + sysBP + cigsPerDay + prevalentHyp + glucose, data = data_test_imp, family = binomial())
+
+confint(mod)
+
+summary(mod)
+```
+
 
 
 # Discussion
