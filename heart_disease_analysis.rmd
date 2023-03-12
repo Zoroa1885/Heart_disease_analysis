@@ -585,7 +585,7 @@ confusionMatrix(data=predicted_value, reference = expected_value)$table
 roc_obj_lasso <- roc(y.test, lasso_preds)
 auc(roc_obj_lasso)
 ```
-The model performs significantly worse! It looks like the model uses variables like education as a proxy for a intercept, so we make a model with intercept to negate this effect
+The model performs significantly worse! It looks like the model uses variables like education as a proxy for a intercept, so we make a model with intercept too remove this effect
 ```{r First Imputed Lasso model}
 cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
