@@ -527,10 +527,7 @@ barplot(apply(B_coef_count, 2, sum)/B)
 
 ## Lasso on Imputed Data
 
-### Normal imputation with mice
-```{r}
-response <- "TenYearCHD"
-
+```{r Imputation with mice}
 set.seed(8701)
 tr = 7/10 # train ratio
 r = dim(data)[1]
@@ -543,23 +540,63 @@ data <- data %>%
 data_train <- data[train,]
 data_test <- data[-train,]
 
+# Important that we don't use the response as predictor when imputing
+y.train <- data_train_imp$TenYearCHD
+y.test <- data_test_imp$TenYearCHD
+
+data_train["TenYearCHD"] <- NULL
+data_test["TenYearCHD"] <- NULL
+
 imp_train = mice(data_train, m=1)
 data_train_imp = complete(imp_train)
 
 imp_test = mice(data_test, m=1)
 data_test_imp = complete(imp_test)
 
+x.train_imp <- model.matrix(~.-1, data = data_train_imp)
+x.test_imp <- model.matrix(~.-1, data = data_test_imp)
 ```
 
-### First Imputed Lasso model
 
-Specifying imputation methods. First we check what mice allready uses.
+```{r First Imputed Lasso model}
+cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+plot(cv.out$glmnet.fit, "lambda", label=F)
+plot(cv.out)
+cv.out$lambda.min
+cv.out$lambda.1se
+```
+```{r}
+lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
+
+lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
+lasso_coef[,1]
+```
+The model drops no variables, which is very worrisome. We check the predictive power of the model to see if this makes the model worse 
+
+```{r}
+lasso_preds <- predict(lasso_mod, newx = x.test_c, type = "response",  s = cv.out$lambda.1se)
+
+sum(round(lasso_preds) == 1)
+
+predicted_value <- factor(round(lasso_preds))
+expected_value <- factor(y.test_c)
+
+confusionMatrix(data=predicted_value, reference = expected_value)$table
+
+roc_obj_lasso <- roc(y.test_c, lasso_preds)
+auc(roc_obj_lasso)
+```
+The model performs significantly worse!
+
+### Specifying imputation methods
+
+Specifying imputation methods. First we check what mice already uses.
 ```{r}
 init = mice(data, maxit = 0)
 meth = init$method
 meth
 ```
-Check data type
+Mice uses polyreg for the factor variable and predictive mean matching (pmm) for all other. Check data type
 ```{r}
 types = sapply(data, class)
 types
@@ -569,6 +606,28 @@ Check number of unique
 n_unique = sapply(data, function(x) length(unique(x)))
 n_unique
 ```
+We can use logreg for BPMeds - since it is binary -, polyreg for education and linear regression for all other columns with missing 
+
+```{r}
+meth["BPMeds"] <- "logreg"
+meth["totChol"] <- "norm.predict"
+meth["BMI"] <- "norm.predict"
+meth["heartRate"] <- "norm.predict"
+meth["glucose"] <- "norm.predict"
+meth["cigsPerDay"] <- "norm.predict"
+meth
+```
+```{r}
+imp2_train = mice(data_train, m=1, method = meth)
+data_train_imp_specified = complete(imp2_train)
+
+imp2_test = mice(data_test, m=1, method = meth)
+data_test_imp_specified = complete(imp2_test)
+
+x.train_imp_s <- model.matrix(~.-1, data = data_train_imp_specified)
+x.test_imp_S <- model.matrix(~.-1, data = data_test_imp_specified)
+```
+
 
 
 ```{r}
