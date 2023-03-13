@@ -459,13 +459,17 @@ In the model section we will consider two data sets: the complete case and imput
 set.seed(8701)
 # Complete data
 
-X.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial()))
+X.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
+train.complete.mean = attr(X.train.complete, "scaled:center")
+train.complete.sd = attr(X.train.complete, "scaled:scale")
+
 y.train.complete = d.train.complete$TenYearCHD
 
 # Imputed data
 X.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family = binomial()))
+train.imp.mean = attr(X.train.imp, "scaled:center")
+train.imp.sd = attr(X.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
-
 
 
 ################## !!! Viktig problem. Det funker ikke å bruke scale() fordi når vi senere skal predikere på test settet må vi standardisere dette også og da trenger vi mean og sd fra test settet, ikke train. Information leak! ##########################
@@ -513,7 +517,7 @@ lasso_mod = glmnet(X.train.complete, y.train.complete, family = "binomial", inte
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 
-x.test.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.complete, family = binomial())) # Dette er feil!!!!
+x.test.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.complete, family = binomial()), center = train.complete.mean, scale = train.complete.sd)
 lasso_preds <- predict(lasso_mod, newx = x.test.complete, type = "response",  s = cv.out$lambda.1se)
 
 sum(round(lasso_preds) == 1)
@@ -599,7 +603,7 @@ lasso_mod = glmnet(X.train.imp, y.train.imp, family = "binomial", alpha = 1, int
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 
-x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial())) # Dette er feil!!!!
+x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial()), center = train.imp.mean, scale = train.imp.sd)
 lasso_preds <- predict(lasso_mod, newx = x.test.imp, type = "response",  s = cv.out$lambda.1se)
 
 sum(round(lasso_preds) == 1)
