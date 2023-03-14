@@ -979,3 +979,8 @@ More or less, we obtain the same results, as it is the same covariates that come
 When we set out, our goal was to explore imputation techniques and learn about 'MICE', single imputation, Lasso and bootstrapping with Lasso. 
 We first fit a logistic regression model on the complete case training set. 
 
+TODO:
+Write discussion
+Write intro
+Knit and fix the last parts regarding which code should be eval, echo, etc...
+
