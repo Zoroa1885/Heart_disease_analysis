@@ -58,16 +58,15 @@ data$education = factor(data$education, labels = c("none","hs","college","post-g
 
 ```
 
-This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, thus we will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we notice that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and naive guessing we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
+This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, thus we will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we notice that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
 
 The next thing we looked at was the number of missing data in our data set.
 
 ```{r plot missing data}
 # Look at the missing data
-md_mat = md.pattern(data, rotate.names = T, plot = T) # Can we make these plots prettier?
+md_mat = md.pattern(data, rotate.names = T, plot = T)
 gg_miss_var(data)
 ```
-
 
 As we can see there are six covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.  
 
@@ -85,22 +84,23 @@ d.test = data[-train,]
 
 ```{r complete case}
 # Make a dataset containing only the complete cases
+d.complete <- data[complete.cases(data), ]
 d.train.complete <- d.train[complete.cases(d.train), ]
 d.test.complete <- d.test[complete.cases(d.test), ]
 
 pos_response_c = sum(data[complete.cases(data),]$TenYearCHD==1)
 ```
 
-The complete data set contains `r sum(complete.cases(data))` observations and the response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response_c/sum(complete.cases(data))*100,1)`\% of the total observations. As we can see, the proportion of positive observations in the response is the same, which is a good indicator that our data is missing at random (MAR), and it is therefore possible to do imputation.
+The complete data set contains `r sum(complete.cases(data))` observations and the response variable has `r pos_response_c` observations that are 1, which equals about `r round(pos_response_c/sum(complete.cases(data))*100,1)`\% of the total observations. As we can see, the proportion of positive observations in the response is the same, which is a good indicator that our data is missing at random (MAR), and it is therefore possible to do imputation.
 
-From the exploratory analysis we see that there are many missing data points. However, the complete case data set is also quite large. Our main focus for this project will therefore be to compare the results from doing lasso on the complete case with the results from doing lasso on an imputed data set. 
+From the exploratory analysis we see that there are many missing data points. However, the complete case data set is also quite large. Our main focus for this project will therefore be to compare the results from doing lasso on the complete case with the results from doing lasso on an imputed data set.
 
 
 ```{r exp analysis, eval = F}
 # Is it of interest to consider a correlation plot in this case? 
 
 # Make a correlation plot 
-cor_mat = cor(subset(df_complete, select = -education)) # Cannot compute correlation with factor variables
+cor_mat = cor(subset(d.complete, select = -education)) # Cannot compute correlation with factor variables
 ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
    outline.col = "white",
    colors = c("blue", "white", "red"))
@@ -109,12 +109,12 @@ ggcorrplot(cor_mat, hc.order = TRUE, type = "lower",
 
 # Missing Data
 
-In our data set, we have some missing values, and we are going to handle these missing values in a slightly more refined manner than just considering the complete case (although our approach will be focused on being exploratory/explicit for the sake of learning instead of "optimal").
+In our data set, we have missing values, and we are additionally going to handle these missing values in a slightly more refined manner than just considering the complete case.
 
-First, as a theoretical warm-up, recall that there are several types of mechanisms for missing data.
-Let $Z = (X,y)$ denote the full collection of covariates and responses, respectively, and we let a subscript mis/obs indicate restricting $Z$ or $X$ to the missing or observed parts, respectively.
+There are several types of mechanisms for missing data.
+Let $Z = (X,y)$ denote the full collection of covariates and responses, respectively, and we let a subscript mis/obs indicate whether we are restricting $Z$ (or $X$) to the missing or observed parts, respectively.
 We may form an indicator (0-1) matrix $R$ indicating missing (0) covariates and observed (1) covariates. 
-Assume $\psi$ is short notation for the parameters in the distribution of $R$.
+Assume $\psi$ is short for the parameters in the distribution of $R$.
 
 The missing data may be characterized by the conditioning in the distribution of $R$.
 We define the data to be:
@@ -124,26 +124,30 @@ We define the data to be:
   \item missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$ (we don't have MCAR or MAR).
 \end{itemize}
 
-By exploring for example the missing pattern of the variable cigsPerDay, we obtain a clear indication that our missing mechanism is not MCAR.
+By exploring for example the missing pattern of the variable 'cigsPerDay', we obtain a clear indication that our missing mechanism is not MCAR.
 No non-smoker has failed to answer the question "how may cigarettes do you smoke a day?", which is a question only aimed at smokers. 
-The simple explanation may be that the survey they answered automatically fills in $0$ for cigsPerDay if you claim to be a non-smoker. 
-In more mathematical terms, cigsPerDay depends on the observed answer to "do you smoke?" (found in variable currentSmoker), indicating that we do not work with MCAR data.
+The simple explanation may be that the survey they answered automatically fills in $0$ for 'cigsPerDay' if you claim to be a non-smoker. 
+In more mathematical terms, 'cigsPerDay' depends on the observed answer to "do you smoke?" (found in variable 'currentSmoker'), indicating that we do not work with MCAR data.
 Luckily, most methods are applicable if our missingness is at least MAR. 
 
 We will assume that the missing mechanism is MAR, as there is no clear reason to suspect it to be MNAR. 
-A pressing obstruction to being MAR can again be found in cigsPerDay. In the real world, if smokers have failed to report cigsPerDay, it may for example be because they smoke so much that they are ashamed to answer the question (and skips it), but we will simply assume that such a thing is not happening, as we trust people to answer truthfully (often, at least) if they volunteer for medical studies. 
+A pressing obstruction to being MAR can again be found in 'cigsPerDay'. In the real world, if smokers have failed to report 'cigsPerDay', it may for example be because they smoke so much that they are ashamed to answer the question (and skips it), but we will simply assume that such a thing is not happening, as we trust people to answer truthfully (often, at least) if they volunteer for medical studies. 
 
 To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubins rules need to be combined with the Lasso, bootstrap and concluding inference. 
 
 The single imputation technique we will use is simply regression imputation, where we adapt our regression technique depending on the type of variable imputed. For continuous variables, we simply use a linear regression model. For binary variables, we use logistic regression to classify their values, and for the variable "education", which is a four-class variable, we have utilized kNN for multiclass imputation. 
+This is implemented manually, but this could have been done using the 'MICE' package and the function 'mice'.
 
 To avoid encountering observations with more than one missing value, and hence problems with regressing, we remove all samples with more than one NA. 
 
-Our data is split into training and test sets, of sizes approximately $80%$ and $20%$ of the original dataset, respectively.
-In order to avoid data leakage in our imputation if the test set, we fit the imputation models on the training set.
+Our data is split into training and test sets, with the test-to-training ratio being 'r tr' of the original dataset.
+In order to avoid data leakage in our imputation of the test set, we fit the imputation models on the training set.
+The main idea is that the test set should be viewed as several independent observations. Using the test set to impute itself will use information not present at the time of training and will yield unintended correlation.
+This is again done manually, but could also have been done using 'mice.reuse'.
+
 Note that we do not include the response (TenYearCHD) in the regression, and in order to avoid too much correlation between the imputed samples, we always base the regression models on the complete case data, instead of letting the imputed values for variable $n$ regress to impute variable $n+1$.  
 
-First, we are removing all samples with more than one covariate missing, as this is only $61$ samples. 
+First, we remove all samples with more than one covariate missing, as this is only $61$ samples. 
 
 ```{r Remove rows with more than 1 NA}
 
@@ -179,7 +183,7 @@ d.test.missing <- d.test[-miss,]
 ```
 
 
-We further split the data into a training and test set, following the training-test-ratio that we have previously set.
+We further split the data into further training and test sets with and without the response 'TenYearCHD', following the training-test-ratio that we have previously set.
 
 ``` {r Missing data split}
 # Making training and test data for covariates and response separately.
@@ -196,8 +200,8 @@ x.test_dat_m = subset(d.test.missing, select = -TenYearCHD)
 y.test.miss = d.test.missing$TenYearCHD
 ```
 
-Using the above data sets, we make regression models for each missing variable based on the data we have. 
-These automatically neglects NA's. 
+Using these data sets, we make regression models for each missing variable based on the data we have. 
+These models automatically neglects NA's. For 'glucose', 'cigsPerDay', 'BMI', 'totChol' and 'heartRate', we fit linear models, while for the binary variable 'BPMeds', a logistic model is fit. The multi-class variable 'education' will be imputed using a kNN-model. 
 
 ``` {r Missing data regression models}
 
@@ -216,9 +220,9 @@ fit_for_simp_edu_m <- gknn(education ~., data = x.train_dat_m) # kNN model for e
 
 ```
 
-To predict, we pick out those samples with missing values of each variable from the training and test set.
+To predict the missing values for each variable, we pick out those samples with missing values of each variable from the training and test set.
 Note that we are imputing for both the training and test set, even though the sampled (therefore "random") split into training and test set may have sorted all NA's of a variable (e.g. heartRate) into a single set (i.e. into either training or test set).
-This is not a problem, as we are only picking out the incomplete cases. Therefore, predicting and filling in the missing values is a vacuous operation, not yielding any problems.
+This is not a problem, as we are only picking out the incomplete cases. Therefore, predicting and filling in the missing values in the complete part is a vacuous procedure, not yielding any problems.
 
 ``` {r Missing data which-to-predict}
 
@@ -266,7 +270,7 @@ test_data_to_pred_edu_m = test_data_to_pred_edu_m[ici(test_data_to_pred_edu_m$ed
 
 ```
 
-We predict new samples for the imputation.
+We then predict the missing values for imputation. For the logistic model fit to predict 'BPMeds', we assign a prediction class $1$ or $0$ depending on whether the predicted value is above or below $0.5$.
 
 ``` {r Missing Data predictions}
 
@@ -302,8 +306,9 @@ pred_edu_test_m <- predict(fit_for_simp_edu_m, newdata = test_data_to_pred_edu_m
 
 ```
 
-To see how our predictions (on the training data) compare to the complete case, we plot (in different ways) the predicted values/classes.
-For illustrating different types of plots, we plot glucose as a transparent histogram and as a point plot. 
+To see how our predictions compare to the complete case, we plot (in different ways) the predicted values/classes.
+For illustrating different types of plots useful for this, we plot glucose twice, as both a transparent histogram and a point plot. 
+This is only for illustrational purposes and therefore only done for the training data with its imputed values. 
 
 ```{r Missing data train-pred-plots}
 
@@ -410,7 +415,7 @@ x.test_imp[ici(x.test_imp$education),]$education <- pred_edu_test_m
 ```
 
 We should by now have obtained completely imputed data sets. 
-To see this, we consider the missing data patterns of the newly constructed data sets.
+To see that our procedure has worked, we could consider the missing data patterns of the newly constructed data sets.
 
 ``` {r check missing data fixed, eval = F}
 
@@ -431,32 +436,27 @@ d.test.imp["TenYearCHD"] = y.test.miss
 
 ```
 
-SUMMARY ABOUT IMPORTANT THINGS:
-1. We removed rows with 2 NA's
-2. We used training data to fit the model used to impute on both train and test. 
-3. MORE? 
-
-There are several steps in this procedure that could be improved. 
+We have managed to impute the missing values, but there are several steps in this procedure that could be improved. 
 
 First of all, we could have used more flexible models for imputation than linear imputation, and we could have fit several different models on the training set and done evaluation procedures within the training set (e.g. cross validated optimization of ROC-AUC) to pick the models before fixing a model to impute each variable. 
 
-Some variables, such as cigsPerDay, are in some sense discrete, although we have treated them as continuous (as it is possible to smoke e.g. $2,73$ cigaretts per day). These could have been rounded off to integers, but we didn't see why this would be necessary. 
-We did not include the response (TenYearCHD) in the regressions. 
+Some variables, such as 'cigsPerDay', are in some sense discrete, although we have treated them as continuous (as it is possible to smoke e.g. $2,73$ cigarettes per day). These could have been rounded off to integers, but we didn't see why this would be necessary. 
+We did not include the response ('TenYearCHD') in the regressions. 
 It is not clear to us why it would be a better choice to include it, as we don't want the imputed data to be overfitted towards the response.
-We could might as well have included the response, if we wanted. 
-More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice.
+More reading and testing would be needed to figure out the optimal solution, if there is any canonical choice, and it would be interesting to see how our results changed if the response were included.
 
-The imputation was not done using the functions from the MICE package.
-This is partially because we wanted to get our hands dirty and do it ourselves (for practice) and partially because we couldn't figure out how to use MICE to train a regression model on the training set and predict values on the test set using the same regression model.
+For less code, the 'MICE' package could have been used, referring to the function 'mice' for imputation of the training set and 'mice.reuse' to reuse the imputation models on the test set. 
+
 
 # Model
 
-In the model section we will consider two data sets: the complete case and imputed case. Both data sets are further divided into a train and test set. 
+In the model section we will consider the two data sets; the complete case and imputed case. Both data sets are further divided into a train and test set. 
 
 ```{r complete train test}
 # Make the training data ready for lasso
 
 set.seed(8701)
+
 # Complete data
 
 X.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
@@ -807,6 +807,5 @@ summary(mod)
 
 STILL MISSING TO DO: 
 
-Rydd opp så vi enten bruker Elias sin imputation kode eller mice.
 Endre så test-settene blir scaled med hensyn på colonne mean og sd fra training set, ikke seg selv. Kan fortsatt bruke scale, men må gi argumentene center = mean(train.data) og scale = sd(train.data). Bør være greit. Jeg kan evt. fikse senere, men prediksjonene nå er feil pga dette.  
 Hvis vi fikser disse to tingene så bør det kun mangle model selection og inference. 
