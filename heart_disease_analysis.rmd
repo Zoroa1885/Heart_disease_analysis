@@ -678,6 +678,7 @@ meth
 ```
 
 ```{r, eval = F}
+set.seed(8701)
 imp2_train = mice(data_train, m=1, method = meth)
 data_train_imp_specified = complete(imp2_train)
 
@@ -719,7 +720,7 @@ confusionMatrix(data=predicted_value, reference = expected_value)$table
 roc_obj_lasso <- roc(y.test, lasso_imp_preds)
 auc(roc_obj_lasso)
 ```
-Performs close to 
+High Auc, but very unbalanced classification. Almost no patients are classified as positive, similar to the complete case logistic regression. Using different imputation methods seems to have some effect on the prediction, but the difference might be due to random effects.
 
 ### Bootstrapping
 
