@@ -29,6 +29,7 @@ library(ggplot2)
 library(e1071) #If we use KNN for imputation of education (multiclass)
 library(pROC)
 library(caret)
+library(NADIA)
 ```
 
 # Introduction
@@ -472,6 +473,7 @@ train.imp.sd = attr(X.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
 
 
+
 ################## !!! Viktig problem. Det funker ikke å bruke scale() fordi når vi senere skal predikere på test settet må vi standardisere dette også og da trenger vi mean og sd fra test settet, ikke train. Information leak! ##########################
 ```
 
@@ -496,7 +498,7 @@ plot(roc_obj)
 auc(roc_obj)
 ```
 
-The logistic regression model chooses `r names(coefficients(mod0))[c(1,2,3,5,8,13,14,18)]` as the significant covariates. 
+The logistic regression model chooses `r names(coefficients(mod0))[c(1,2,3,5,8,13,14,18)]` as the significant covariates. It classifies very few positives correctly, which is very problematic if the model would be used to predict hearth disease. 
 
 
 
@@ -506,13 +508,13 @@ Next we wish to do.
 ```{r Lasso CV}
 
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(X.train.complete, y.train.complete, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+cv.out = cv.glmnet(X.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 
-lasso_mod = glmnet(X.train.complete, y.train.complete, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(X.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
@@ -531,6 +533,7 @@ roc_obj <- roc(d.test.complete$TenYearCHD, lasso_preds, levels = c(0,1), directi
 plot(roc_obj)
 auc(roc_obj)
 ```
+The lasso model is much better at classifying positives than the full logistic model and has only slightly worse auc. 
 
 Bootstrapping
 ```{r Bootstrap Lasso, eval = F}
@@ -573,8 +576,8 @@ data_train <- data[train,]
 data_test <- data[-train,]
 
 # Important that we don't use the response as predictor when imputing
-y.train <- data_train_imp$TenYearCHD
-y.test <- data_test_imp$TenYearCHD
+y.train <- data_train$TenYearCHD
+y.test <- data_test$TenYearCHD
 
 data_train["TenYearCHD"] <- NULL
 data_test["TenYearCHD"] <- NULL
@@ -582,15 +585,17 @@ data_test["TenYearCHD"] <- NULL
 imp_train = mice(data_train, m=1)
 data_train_imp = complete(imp_train)
 
-imp_test = mice(data_test, m=1)
-data_test_imp = complete(imp_test)
+# Use the imputation model trained on the traning set on the test set, to ensure no data leakage.
+imp_test = mice.reuse(imp_train, data_test)
+names(imp_test)
+data_test_imp = imp_test$"1"
 
 x.train_imp <- model.matrix(~.-1, data = data_train_imp)
 x.test_imp <- model.matrix(~.-1, data = data_test_imp)
 ```
 
-
-```{r First Imputed Lasso model2}
+First we try the dataset where we imputed with our own technique. 
+```{r First Imputed Lasso model}
 # We need to standardize the matrix so that we can drop intercepts.
 cv.out = cv.glmnet(X.train.imp, y.train.imp, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
@@ -617,21 +622,21 @@ roc_obj <- roc(d.test.imp$TenYearCHD, lasso_preds, levels = c(0,1), direction = 
 plot(roc_obj)
 auc(roc_obj)
 ```
-The model performs significantly worse! It looks like the model uses variables like education as a proxy for a intercept, so we make a model with intercept too remove this effect. I don't have this problem anymore. 
-```{r First Imputed Lasso model, eval = F}
+The performance of this model is quite similar to that of the complete case. The prediction is quite balanced, labeling more positives correctly than not. The model does however incorrectly many negatives as positives, like the lasso for the complete case. 
+```{r Second Imputed Lasso model, eval = F}
 cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 
-# We need to standardize the matrix so that we can drop intercepts.
-lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1,  lasso = cv.out$lambda.1se)
+
+lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 
-lasso_preds <- predict(lasso_mod, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
+lasso_preds <- predict(lasso_mod, newx = x.test_imp, type = "response", s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_preds))
 expected_value <- factor(y.test)
@@ -676,15 +681,17 @@ meth
 imp2_train = mice(data_train, m=1, method = meth)
 data_train_imp_specified = complete(imp2_train)
 
-imp2_test = mice(data_test, m=1, method = meth)
-data_test_imp_specified = complete(imp2_test)
+imp2_test = mice.reuse(imp2_train, data_test)
+data_test_imp_specified = imp2_test$"1"
 
 x.train_imp_s <- model.matrix(~.-1, data = data_train_imp_specified)
-x.test_imp_S <- model.matrix(~.-1, data = data_test_imp_specified)
+x.test_imp_s <- model.matrix(~.-1, data = data_test_imp_specified)
+
+dim(x.test_imp_s)
 ```
 
 ```{r Lasso Imputed With new methods, eval = F}
-
+set.seed(8701)
 # Use cross-validation to find lambda
 cv.out = cv.glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
@@ -702,17 +709,17 @@ lasso_imp_coef[,1]
 
 
 ```{r, eval = F}
-lasso_imp_preds <- predict(lasso_mod_imp_s, newx = x.test_imp, type = "response",  s = cv.out$lambda.1se)
+lasso_imp_preds <- predict(lasso_mod_imp_s, newx = x.test_imp_s, type = "response",  s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_imp_preds))
 expected_value <- factor(y.test)
 
 confusionMatrix(data=predicted_value, reference = expected_value)$table
 
-roc_obj_lasso <- roc(y.test, lasso_preds)
+roc_obj_lasso <- roc(y.test, lasso_imp_preds)
 auc(roc_obj_lasso)
 ```
-Does not change the predictive performance.
+Performs close to 
 
 ### Bootstrapping
 
