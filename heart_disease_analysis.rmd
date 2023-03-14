@@ -460,18 +460,20 @@ set.seed(8701)
 
 # Complete data
 
-X.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
-train.complete.mean = attr(X.train.complete, "scaled:center")
-train.complete.sd = attr(X.train.complete, "scaled:scale")
+x.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
+train.complete.mean = attr(x.train.complete, "scaled:center")
+train.complete.sd = attr(x.train.complete, "scaled:scale")
 
 y.train.complete = d.train.complete$TenYearCHD
 
 # Imputed data
-X.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family = binomial()))
-train.imp.mean = attr(X.train.imp, "scaled:center")
-train.imp.sd = attr(X.train.imp, "scaled:scale")
+x.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family = binomial()))
+train.imp.mean = attr(x.train.imp, "scaled:center")
+train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
 
+# Same for test data, but depending on train imp
+x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial()), center = train.imp.mean, scale = train.imp.sd)
 
 
 ################## !!! Viktig problem. Det funker ikke å bruke scale() fordi når vi senere skal predikere på test settet må vi standardisere dette også og da trenger vi mean og sd fra test settet, ikke train. Information leak! ##########################
@@ -479,6 +481,7 @@ y.train.imp = d.train.imp$TenYearCHD
 
 
 Given the binary response it is natural to consider fitting a logistic regression model to our data. Although we intend to use lasso, it is nice to start by fitting a regular logistic regression model to get an indication of which covariates that are most present, and for later comparison. 
+
 ```{r Logistic Model}
 # Fit a logistic model
 mod0 <- glm(TenYearCHD ~ ., data = d.train.complete, family = binomial())
@@ -508,13 +511,13 @@ Next we wish to do.
 ```{r Lasso CV}
 
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(X.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1)
+cv.out = cv.glmnet(x.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 
-lasso_mod = glmnet(X.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(x.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
@@ -539,12 +542,13 @@ Bootstrapping
 ```{r Bootstrap Lasso, eval = F}
 ################################## IGNORER FORELØPIG ##########################################
 B = 500
+boot_size_c = dim(d.train.complete)[1]
 
 B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
 for (i in 1:B){
-  data_b = sample(1:size, size = size, replace = TRUE)
-  x = x.train_c[data_b,]
-  y = y.train_c[data_b]
+  data_b = sample(1:boot_size_c, size = boot_size_c, replace = TRUE)
+  x = x.train.complete[data_b,]
+  y = y.train.complete[data_b]
   cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
   lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
 
@@ -560,55 +564,58 @@ barplot(apply(B_coef_count, 2, sum)/B, las = 2)
 #############################################################################################
 ```
 
+
 ## Lasso on Imputed Data
+
+We do the same thing, just using the imputed data instead of the complete case. 
+To spice things up, we also construct a imputed data set using 'mice' and 'mice.reuse', for comparison. 
 
 ```{r Imputation with mice, eval = F}
 set.seed(8701)
-tr = 7/10 # train ratio
-r = dim(data)[1]
-size = round(r*tr)
-train = sample(1:r,size = size)
-
-data <- data %>%
-  mutate(education = as.factor(education))
-
-data_train <- data[train,]
-data_test <- data[-train,]
 
 # Important that we don't use the response as predictor when imputing
-y.train <- data_train$TenYearCHD
-y.test <- data_test$TenYearCHD
+y.train <- d.train$TenYearCHD
+y.test <- d.test$TenYearCHD
 
-data_train["TenYearCHD"] <- NULL
-data_test["TenYearCHD"] <- NULL
+d.train["TenYearCHD"] <- NULL
+d.test["TenYearCHD"] <- NULL
 
-imp_train = mice(data_train, m=1)
-data_train_imp = complete(imp_train)
+imp_train = mice(d.train, m=1)
+d.train.imp.mice = complete(imp_train)
 
 # Use the imputation model trained on the traning set on the test set, to ensure no data leakage.
-imp_test = mice.reuse(imp_train, data_test)
-names(imp_test)
-data_test_imp = imp_test$"1"
+imp_test = mice.reuse(imp_train, d.test)
+d.test.imp.mice = imp_test$"1"
 
-x.train_imp <- model.matrix(~.-1, data = data_train_imp)
-x.test_imp <- model.matrix(~.-1, data = data_test_imp)
+# We scale the model matrix as before.
+
+x.train.imp.mice = scale(model.matrix(~ . -1, data = d.train.imp.mice, family = binomial()))
+train.imp.mean.mice = attr(x.train.imp.mice, "scaled:center")
+train.imp.sd.mice = attr(x.train.imp.mice, "scaled:scale")
+y.train.imp.mice = d.train.imp$TenYearCHD
+
+# Same for test data, but depending on train imp
+x.test.imp.mice = scale(model.matrix(~ . -1, data = d.test.imp.mice, family = binomial()), center = train.imp.mean.mice, scale = train.imp.sd.mice)
+
+##### FIX DATA LEAKAGE COMMENT ON WHY WE SCALE TEST WEIRDLHY
 ```
 
-First we try the dataset where we imputed with our own technique. 
-```{r First Imputed Lasso model}
+
+First we try the Lasso on the imputed dataset where we imputed with our manual technique.
+
+```{r Manually Imputed Lasso model}
 # We need to standardize the matrix so that we can drop intercepts.
-cv.out = cv.glmnet(X.train.imp, y.train.imp, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+cv.out = cv.glmnet(x.train.imp, y.train.imp, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 
-lasso_mod = glmnet(X.train.imp, y.train.imp, family = "binomial", alpha = 1, intercept = F, standardize=TRUE,  lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(x.train.imp, y.train.imp, family = "binomial", alpha = 1, intercept = F, standardize=TRUE,  lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 
-x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial()), center = train.imp.mean, scale = train.imp.sd)
 lasso_preds <- predict(lasso_mod, newx = x.test.imp, type = "response",  s = cv.out$lambda.1se)
 
 sum(round(lasso_preds) == 1)
@@ -622,21 +629,25 @@ roc_obj <- roc(d.test.imp$TenYearCHD, lasso_preds, levels = c(0,1), direction = 
 plot(roc_obj)
 auc(roc_obj)
 ```
+
 The performance of this model is quite similar to that of the complete case. The prediction is quite balanced, labeling more positives correctly than not. The model does however incorrectly many negatives as positives, like the lasso for the complete case. 
-```{r Second Imputed Lasso model, eval = F}
-cv.out = cv.glmnet(x.train_imp, y.train, family = "binomial", alpha = 1)
+
+We try to do the same thing, using the 'MICE'-imputed data set. 
+
+```{r Mice Imputed Lasso model, eval = F}
+cv.out = cv.glmnet(x.train.imp.mice, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
 
 
-lasso_mod = glmnet(x.train_imp, y.train, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+lasso_mod = glmnet(x.train.imp.mice, y.train, family = "binomial", alpha = 1, intercept = F, standardize=TRUE, lasso = cv.out$lambda.1se)
 
 lasso_coef <- coef(lasso_mod,s=cv.out$lambda.1se)
 lasso_coef[,1]
 
-lasso_preds <- predict(lasso_mod, newx = x.test_imp, type = "response", s = cv.out$lambda.1se)
+lasso_preds <- predict(lasso_mod, newx = x.test.imp.mice, type = "response", s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_preds))
 expected_value <- factor(y.test)
@@ -646,7 +657,13 @@ confusionMatrix(data=predicted_value, reference = expected_value)$table
 roc_obj_lasso <- roc(y.test, lasso_preds)
 auc(roc_obj_lasso)
 ```
-The predictive performance is improved, but still worse than the complete case. This is probably because the model performs worse on data points with imputed values, since these values might not correlate correctly with the response.
+
+The predictive performance has not changed a lot, in the eyes of AUC, but as it misclassifies almost every ill person, this is perhaps the worst model. 
+This may indicate that the base imputation methods in 'mice' actually overfits to the training data.
+Our manually imputed data set had a nuanced (although simple) take on which methods to use, such as linear models, log.reg. and kNN.
+
+We check with methods 'mice' is using, in hope of finding the problem and improving the imputation procedure. 
+
 ### Specifying imputation methods
 
 ```{r Check what mice already uses, eval = F}
@@ -655,17 +672,24 @@ meth = init$method
 meth <- meth[-16] #Remove response
 meth
 ```
-Mice uses polyreg for the factor variable and predictive mean matching (pmm) for all other.
+
+It turns out that 'mice' uses predictive mean matching (pmm) for all variables, except 'education', which has multiple classes.
+For 'education' it uses multiple logistic regression.
+We first check which type each variable is. 
+
 ```{r Check data type, eval = F}
 types = sapply(data, class)
 types
 ```
+Then we count the number of unique values each variable has, including NA's as its own level.
 
 ```{r Check number of unique, eval = F}
 n_unique = sapply(data, function(x) length(unique(x)))
 n_unique
 ```
-We can use logreg for BPMeds - since it is binary -, polyreg for education and linear regression for all other columns with missing 
+From this, we may understand, that in the eyes of 'mice', 'BPMeds' actually has three levels, when it in reality has two. 
+Therefore, we specify the methods we want mice to use before imputing again. 
+Since 'BPMeds' is binary, we use logistic regression to classify, we continue to use 'polyreg' for 'education' (to compare with our manual imputation, where we used kNN), and we fit linear imputation models for the other variables.
 
 ```{r Specify new imputation methods, eval = F}
 meth["BPMeds"] <- "logreg"
@@ -677,40 +701,58 @@ meth["cigsPerDay"] <- "norm.predict"
 meth
 ```
 
-```{r, eval = F}
+We try again to impute using 'mice', but with our newly specified imputation methods. 
+
+
+```{r new mice imputation, eval = F}
+
 set.seed(8701)
-imp2_train = mice(data_train, m=1, method = meth)
-data_train_imp_specified = complete(imp2_train)
+imp_train.mice.new = mice(d.train, m=1, method = meth)
+d.train.imp.mice.new = complete(imp_train.mice.new)
 
-imp2_test = mice.reuse(imp2_train, data_test)
-data_test_imp_specified = imp2_test$"1"
+imp_test.mice.new = mice.reuse(imp_train.mice.new, d.test)
+d.test.imp.mice.new = imp_test.mice.new$"1"
 
-x.train_imp_s <- model.matrix(~.-1, data = data_train_imp_specified)
-x.test_imp_s <- model.matrix(~.-1, data = data_test_imp_specified)
+x.train.imp.mice.new <- model.matrix(~.-1, data = d.train.imp.mice.new)
+x.test.imp.mice.new <- model.matrix(~.-1, data = d.test.imp.mice.new)
 
-dim(x.test_imp_s)
+# We scale the model matrix as before.
+
+x.train.imp.mice.new= scale(model.matrix(~ . -1, data = d.train.imp.mice.new, family = binomial()))
+train.imp.mean.mice.new = attr(x.train.imp.mice.new, "scaled:center")
+train.imp.sd.mice.new = attr(x.train.imp.mice.new, "scaled:scale")
+y.train.imp.mice.new = d.train.imp$TenYearCHD
+
+# Same for test data, but depending on train imp
+x.test.imp.mice.new = scale(model.matrix(~ . -1, data = d.test.imp.mice.new, family = binomial()), center = train.imp.mean.mice.new, scale = train.imp.sd.mice.new)
+
+##### FIX DATA LEAKAGE COMMENT ON WHY WE SCALE TEST WEIRDLHY
+
 ```
 
-```{r Lasso Imputed With new methods, eval = F}
+The newly imputed data set found by specified methods in 'mice' is then used to fit a Lasso. 
+
+```{r Lasso Imputed with new methods for mice, eval = F}
 set.seed(8701)
+
 # Use cross-validation to find lambda
-cv.out = cv.glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1)
+cv.out = cv.glmnet(x.train.imp.mice.new, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
 plot(cv.out)
 cv.out$lambda.min
 cv.out$lambda.1se
-``` 
 
-```{r, eval = F}
-lasso_mod_imp_s = glmnet(x.train_imp_s, y.train, family = "binomial", alpha = 1,  lasso = cv.out$lambda.1se)
+
+
+lasso_mod_imp_s = glmnet(x.train.imp.mice.new, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_imp_coef <- coef(lasso_mod_imp_s, s=cv.out$lambda.1se)
 lasso_imp_coef[,1]
-```
 
 
-```{r, eval = F}
-lasso_imp_preds <- predict(lasso_mod_imp_s, newx = x.test_imp_s, type = "response",  s = cv.out$lambda.1se)
+
+
+lasso_imp_preds <- predict(lasso_mod_imp_s, newx = x.test.imp.mice.new, type = "response",  s = cv.out$lambda.1se)
 
 predicted_value <- factor(round(lasso_imp_preds))
 expected_value <- factor(y.test)
@@ -720,62 +762,41 @@ confusionMatrix(data=predicted_value, reference = expected_value)$table
 roc_obj_lasso <- roc(y.test, lasso_imp_preds)
 auc(roc_obj_lasso)
 ```
-High Auc, but very unbalanced classification. Almost no patients are classified as positive, similar to the complete case logistic regression. Using different imputation methods seems to have some effect on the prediction, but the difference might be due to random effects.
+
+Surprisingly enough, we obtain a slightly better AUC, but without changing the number of true positives significantly. 
+This is still terrible, as we would at least want to have a low amount of false negatives. 
+Using different imputation methods seems to have some effect on the prediction, but the difference might be due to random effects, and it is not clear to us why 'mice' yields so bad results. 
+We strongly suspect that 'mice' introduces extra correlation by running chained imputations.
+That is, where our manual approach used the same complete data to predict each imputation value, 'mice' probably imputes one covariate, and then uses the newly imputed data set to impute further covariates. 
+Since the Lasso is not that good at handling high correlation, this chained imputation by 'mice' may cause most of the problems.
 
 ### Bootstrapping
 
-```{r Bootstrap Lasso with imputation in boot, eval = F}
+To obtain improved estimates for the coefficients in the Lasso, we use bootstrapping. 
+The data set used will be our manually imputed data set, as this seems to give better results due to 'mice' introducing extra correlation.
+
+
+```{r Bootstrap Lasso with imputed data, eval = F}
 set.seed(8701)
 B = 500
-size = dim(data)[1]
+size = dim(x.train.imp)[1]
 
 B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
 for (i in 1:B){
   boot_ind = sample(1:size, size = size, replace = TRUE)
-  data_b = data[boot_ind,]
   
-  y = data_b$TenYearCHD
-  data_b["TenYearCHD"] <- NULL
-  
-  imp_b <- mice(data_b, m = 1)
-  data_b_imp = complete(imp_b)
-  x = model.matrix(~.-1, data = data_b_imp)
-  
-  cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
-  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
-
-  B_coef[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
-}
-
-colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
-boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55), las = 2)
-```
-```{r}
-B_coef_count = ifelse(B_coef == 0,0,1)
-barplot(apply(B_coef_count, 2, sum)/B, las=2)
-```
-
-```{r ootstrap Lasso with imputation outside boot, eval = F}
-set.seed(8701)
-B = 500
-size = dim(data_train_imp)[1]
-
-B_coef = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
-for (i in 1:B){
-  boot_ind = sample(1:size, size = size, replace = TRUE)
-  data_b = data_train_imp[boot_ind,]
-  
-  x = model.matrix(~.-1, data = data_b)
+  x = x.train.imp[boot_ind,]
   y = y.train[boot_ind]
   
-  cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
-  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, lasso = cv.out$lambda.1se)
+  cv.out = cv.glmnet(x, y, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
+  lasso_mod = glmnet(x, y, family = "binomial", intercept = F, standardize=TRUE, alpha = 1, lasso = cv.out$lambda.1se)
 
   B_coef[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
 }
 
 colnames(B_coef) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
-boxplot.matrix(B_coef[,-1], ylim = c(-0.25,0.55), las = 2)
+boxplot.matrix(B_coef[,-1], las = 2)
+#, ylim = c(-0.02,0.02)
 ```
 
 ```{r, eval = F}
