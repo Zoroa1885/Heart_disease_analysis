@@ -545,11 +545,12 @@ The logistic regression model chooses `r names(which(summary(mod0)$coefficients[
 We continue to do the Lasso on the complete case data. To do this, we use cross-validation to find $\lambda_{min}$ and use the highest $\lambda$ with deviance within one standard deviation of $\lambda_{min}$. We cross-validate for $\lambda$ and plot the shrinkage and binomial deviance.
 
 ```{r Lasso CV, echo = F, fig.height = 4.3 , fig.width=6}
+#, fig.height = 4.3 , fig.width=6
 set.seed(8701)
 
 # Use cross-validation to find lambda
 cv.out = cv.glmnet(x.train.complete, y.train.complete, family = "binomial",intercept = F, standardize=TRUE, alpha = 1)
-plot(cv.out$glmnet.fit, "lambda", label=F, main = "CV for lambda - shrinkage of coefficients", cex = 0.4)
+plot(cv.out$glmnet.fit, "lambda", label=F, main = "CV for lambda - shrinkage of coefficients",  cex = 0.4)
 plot(cv.out, main = "Binomial deviance for lambda")
 #cv.out$lambda.min
 #cv.out$lambda.1se
@@ -883,7 +884,7 @@ cbind(as.matrix(round(CI_mice[c(1,2,3,4,6,5),],4)), rbind(as.matrix(round(CI_mod
 diff1 = CI_mod[3,2] - CI_mod[3,1]
 diff2 = CI_mice[3,2] - CI_mice[3,1]
 ```
-We can see, for example by considering 'sysBP', see that the width of the interval has gone further down by working on the imputed data, as the confidence interval width for 'sysBP' was `r diff1` for the complete case model and `r diff2`.
+We can see, for example by considering 'sysBP', see that the width of the interval has gone further down by working on the imputed data, as the confidence interval width for 'sysBP' was `r diff1` for the complete case model and `r diff2`. 
 This may simply be because we use more data to fit the model, but it may also be a nonsensical question, as we are in essence fitting two different models. 
 The inclusion of 'cigsPerDay' in the model on imputed data is probably a key reason why we see such a difference. 
 More or less, we obtain the same results, as it is the same covariates that come back time and time again.
