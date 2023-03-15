@@ -3,11 +3,15 @@ naniar
 mice
 Matrix
 glmnet
+tidyr
 dplyr
 ggplot2
 lattice
 caret
 ggcorrplot
 e1071
-tidyr
 pROC
+mlr3
+mlr3pipelines
+paradox
+NADIA
