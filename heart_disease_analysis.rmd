@@ -16,6 +16,8 @@ knitr::opts_chunk$set(echo = FALSE,tidy=TRUE,message=FALSE,warning=FALSE,strip.w
 ```
 
 
+
+
 ```{r Loading Packages,eval=TRUE,echo=FALSE}
 # Load libraries
 library(naniar)
@@ -46,8 +48,8 @@ We start by examining the dataset.
 ```{r Loading Data, echo = F, fig.width= 4, fig.height=4, cex = 0.7}
 # Load and look at data
 # data <- framingham # Just if manual import
-# data <- read.csv("framingham.csv")
-data <- read.csv("C:\\Heart_disease_analysis\\framingham.csv")
+data <- read.csv("framingham.csv")
+# data <- read.csv("C:\\Heart_disease_analysis\\framingham.csv")
 data_dim = dim(data)
 pos_response = sum(data$TenYearCHD==1)
 # str(data)
@@ -66,9 +68,11 @@ This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariate
 
 The next thing we looked at was the number of missing data in our data set.
 
-```{r plot missing data, echo = F, fig.width= 5, fig.height=3, cex = 0.5}
+```{r plot missing data, echo = F, fig.width= 10, fig.height=6, cex = 0.5}
 # Look at the missing data
 md_mat = md.pattern(data, rotate.names = T, plot = T)
+```
+```{r, echo = F, fig.width= 5, fig.height=3, cex = 0.5}
 gg_miss_var(data)
 ```
 
