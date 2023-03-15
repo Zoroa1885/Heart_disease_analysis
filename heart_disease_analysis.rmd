@@ -35,17 +35,18 @@ library(NADIA)
 # Introduction
 
 In this project we have studied the [Framingham Coronary Heart Disease Dataset](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression?fbclid=IwAR1LE3P3vM1SyHBifotrNdXoKGv7szGR07labEAQo6XUqV9Pi90vtAp4mS4). This dataset contains patient information for inhabitants in Framingham, Massachusetts, and is typically used to predict the chance of getting coronary heart disease (CHD) within the next 10 years. For this project, however, we intend to use lasso to find the most important risk factors.
-
-Our main ------------TODO---------
+This is our main objective, and to see that the variables really are significant, we fit a logistic model using the variables we have selected.
+A secondary, although large, part of our project, is to explore methods for imputing missing data. 
+We will do single regression imputation manually and through the 'mice' package, and investigate a bit what the Lasso is doing on the imputed data sets, compared to the complete case.
 
 We start by examining the dataset. 
 
 
 ## Exploratory Analysis
-```{r Loading Data}
+```{r Loading Data, echo = F}
 # Load and look at data
-# data <- framingham # Just if manual import
-data <- read.csv("framingham.csv")
+data <- framingham # Just if manual import
+# data <- read.csv("framingham.csv")
 data_dim = dim(data)
 pos_response = sum(data$TenYearCHD==1)
 str(data)
@@ -64,7 +65,7 @@ This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariate
 
 The next thing we looked at was the number of missing data in our data set.
 
-```{r plot missing data}
+```{r plot missing data, echo = F}
 # Look at the missing data
 md_mat = md.pattern(data, rotate.names = T, plot = T)
 gg_miss_var(data)
@@ -73,7 +74,7 @@ gg_miss_var(data)
 As we can see there are six covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.
 We split the data into training and test sets, as well as copying the complete case data set for later solutions. 
 
-```{r train-test split}
+```{r train-test split, echo = F}
 # Split into training and test first
 set.seed(8701)
 tr = 7/10 # train ratio
@@ -85,7 +86,7 @@ d.train = data[train,]
 d.test = data[-train,]
 ```
 
-```{r complete case}
+```{r complete case, echo = F}
 # Make a dataset containing only the complete cases
 d.complete <- data[complete.cases(data), ]
 d.train.complete <- d.train[complete.cases(d.train), ]
@@ -98,7 +99,7 @@ The complete data set contains `r sum(complete.cases(data))` observations and th
 
 To end our exploratory analysis, we make a correlation plot of the complete data set, but note that we have removed the multi-class variable 'education'. 
 
-```{r exp analysis, eval = F}
+```{r exp analysis, echo = F}
 # Is it of interest to consider a correlation plot in this case? 
 
 # Make a correlation plot 
@@ -160,7 +161,7 @@ Note that we do not include the response (TenYearCHD) in the regression, and in 
 
 First, we remove all samples with more than one covariate missing, as this is only $61$ samples. 
 
-```{r Remove rows with more than 1 NA}
+```{r Remove rows with more than 1 NA, echo = F}
 
 # Setting seed expressing our love for MA8701
 set.seed(8701)
@@ -196,7 +197,7 @@ d.test.missing <- d.test[-miss,]
 
 We further split the data into further training and test sets with and without the response 'TenYearCHD', following the training-test-ratio that we have previously set.
 
-``` {r Missing data split}
+``` {r Missing data split, echo = F}
 # Making training and test data for covariates and response separately.
 # X.train.miss = subset(d.train.missing, select = -TenYearCHD)
 # y.train.miss = d.train$TenYearCHD
@@ -214,7 +215,7 @@ y.test.miss = d.test.missing$TenYearCHD
 Using these data sets, we make regression models for each missing variable based on the data we have. 
 These models automatically neglects NA's. For 'glucose', 'cigsPerDay', 'BMI', 'totChol' and 'heartRate', we fit linear models, while for the binary variable 'BPMeds', a logistic model is fit. The multi-class variable 'education' will be imputed using a kNN-model. 
 
-``` {r Missing data regression models}
+``` {r Missing data regression models, echo = F}
 
 # We fit linear models on the training set for glucose, cigsPerDay, BMI, totChol, heartRate.
 fit_for_simp_glucose_m <- lm(glucose ~., data = x.train_dat_m)    # Linear model for glucose
@@ -235,7 +236,7 @@ To predict the missing values for each variable, we pick out those samples with 
 Note that we are imputing for both the training and test set, even though the sampled (therefore "random") split into training and test set may have sorted all NA's of a variable (e.g. heartRate) into a single set (i.e. into either training or test set).
 This is not a problem, as we are only picking out the incomplete cases. Therefore, predicting and filling in the missing values in the complete part is a vacuous procedure, not yielding any problems.
 
-``` {r Missing data which-to-predict}
+``` {r Missing data which-to-predict, echo = F}
 
 # Pick out those variables with missing glucose from the training and test set.
 train_data_to_pred_gluc_m = ic(x.train_dat_m)
@@ -283,7 +284,7 @@ test_data_to_pred_edu_m = test_data_to_pred_edu_m[ici(test_data_to_pred_edu_m$ed
 
 We then predict the missing values for imputation. For the logistic model fit to predict 'BPMeds', we assign a prediction class $1$ or $0$ depending on whether the predicted value is above or below $0.5$.
 
-``` {r Missing Data predictions}
+``` {r Missing Data predictions, echo = F}
 set.seed(8701)
 
 # Predicting the values to impute for glucose on the training and test data.
@@ -322,7 +323,7 @@ To see how our predictions compare to the complete case, we plot (in different w
 For illustrating different types of plots useful for this, we plot glucose twice, as both a transparent histogram and a point plot. 
 This is only for illustrational purposes and therefore only done for the training data with its imputed values. 
 
-```{r Missing data train-pred-plots}
+```{r Missing data train-pred-plots, echo = F}
 
 # ---- Make transparent colors for plotting ----
 c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
@@ -390,7 +391,7 @@ This can imply that the kNN-model we fit is not optimal for predicting 'educatio
 
 Lastly, we update our data with the newly imputed values.
 
-``` {r Missing Data imputation}
+``` {r Missing Data imputation, echo = F}
 
 # ---- Making new data sets based on the old ones ----
 x.train_imp = x.train_dat_m
@@ -441,7 +442,7 @@ d.test.imp["TenYearCHD"] = y.test.miss
 We have obtained completely imputed data sets. 
 To see that our procedure has worked, we could consider the missing data patterns of the newly constructed data sets.
 
-``` {r check missing data fixed, eval = F}
+``` {r check missing data fixed, echo = F, eval = F}
 
 # For training data
 md1 = md.pattern(x.train_imp)
@@ -475,7 +476,7 @@ Since the scaling information from the test set is "not available" to us at the 
 We solve this by scaling the training data, and then using the attributes of the training data to scale the test data accordingly.
 
 
-```{r complete train test}
+```{r complete train test, echo = F}
 # Make the training data ready for lasso by scaling.
 
 set.seed(8701)
@@ -503,7 +504,7 @@ x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = b
 Given the binary response it is natural to consider fitting a logistic regression model to our data. Although we intend to use lasso, it is nice to start by fitting a regular logistic regression model on the complete case data to get an indication of which covariates that are most present, and for later comparison. 
 We obtain a confusion matrix, a ROC-curve and the ROC-AUC.
 
-```{r Logistic Model}
+```{r Logistic Model, echo = F}
 # Fit a logistic model
 set.seed(8701)
 mod0 <- glm(TenYearCHD ~ ., data = d.train.complete, family = binomial())
@@ -532,7 +533,7 @@ The logistic regression model chooses `r names(which(summary(mod0)$coefficients[
 
 We continue to do the Lasso on the complete case data. To do this, we use cross-validation to find $\lambda_{min}$ and use the highest $\lambda$ with deviance within one standard deviation of $\lambda_{min}$.
 
-```{r Lasso CV}
+```{r Lasso CV, echo = F}
 set.seed(8701)
 
 # Use cross-validation to find lambda
@@ -577,10 +578,10 @@ This agrees with the reasoning we made earlier.
 
 To obtain a better understanding of these coefficients, we bootstrap from the training data to fit Lasso models and store their coefficients.
 
-```{r Bootstrap Lasso, eval = F}
+```{r Bootstrap Lasso, echo = F}
 set.seed(8701)
 
-B = 50
+B = 500
 boot_size_cc = dim(d.train.complete)[1]
 
 B_coef_cc = matrix(NA, nrow = B, ncol = length(lasso_coef_cc[,1]))
@@ -601,14 +602,14 @@ B_coef_count_cc = ifelse(B_coef_cc == 0,0,1)
 apply(B_coef_count_cc, 2, sum)
 barplot(apply(B_coef_count_cc, 2, sum)/B, las = 2)
 ```
-```{r, eval = F}
+```{r, echo = F}
 
 names_lasso_cc_70 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_cc, 2, sum)/B > 0.7]
 names_lasso_cc_50 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_cc, 2, sum)/B > 0.5]
-names_lasso_cc_70
-names_lasso_cc_50
+# names_lasso_cc_70
+# names_lasso_cc_50
 ```
-The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are 'r names_lasso_cc_70'.
+We ran the bootstrap using 'r B' iterations. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are 'r names_lasso_cc_70'.
 Similarly, by those to those who are included at least $50$\% of the time, we obtain 'r names_lasso_cc_50'.
 This is indeed similar to the ones we picked out earlier. 
 
@@ -622,7 +623,7 @@ To get hands-on experience with the 'MICE' package, we also construct an imputed
 'mice' can be used on the entire training data, without needing to remove those samples with two or more covariates missing. 
 The imputation model from the training set is emplyed to impute the test set as well, to avoid data leakage. 
 
-```{r Imputation with mice, eval = F}
+```{r Imputation with mice, echo = F}
 set.seed(8701)
 
 # Important that we don't use the response as predictor when imputing
@@ -653,7 +654,7 @@ x.test.imp.mice = scale(model.matrix(~ . -1, data = d.test.imp.mice, family = bi
 
 First we try the Lasso on the imputed dataset where we imputed with our manual technique.
 
-```{r Manually Imputed Lasso model}
+```{r Manually Imputed Lasso model, echo = F}
 # We need to standardize the matrix so that we can drop intercepts.
 cv.out = cv.glmnet(x.train.imp, y.train.imp, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
 plot(cv.out$glmnet.fit, "lambda", label=F)
@@ -674,9 +675,9 @@ predicted_value_imp <- factor(round(lasso_preds_imp))
 expected_value_imp <- factor(d.test.imp$TenYearCHD)
 
 conf_mat_imp = confusionMatrix(data=predicted_value_imp, reference = expected_value_imp)$table
-cont_mat_imp
+conf_mat_imp
 
-roc_obj_imp <- roc(d.test.imp$TenYearCHD, lasso_preds, levels = c(0,1), direction = "<")
+roc_obj_imp <- roc(d.test.imp$TenYearCHD, lasso_preds_imp, levels = c(0,1), direction = "<")
 plot(roc_obj_imp)
 auc(roc_obj_imp)
 
@@ -697,7 +698,7 @@ In our data rich situation, this is neither clear enough, nor a problem, but for
 
 We try to do the same thing, using the 'MICE'-imputed data set. 
 
-```{r Mice Imputed Lasso model, eval = F}
+```{r Mice Imputed Lasso model, echo = F}
 set.seed(8701)
 # Cross-validation
 cv.out = cv.glmnet(x.train.imp.mice, y.train, family = "binomial", intercept = F, standardize=TRUE, alpha = 1)
@@ -747,12 +748,12 @@ To obtain improved estimates for the coefficients in the Lasso, we use bootstrap
 The data set used will be the MICE-imputed data set.
 
 
-```{r Bootstrap Lasso with imputed data, eval = F}
+```{r Bootstrap Lasso with imputed data, echo = F}
 set.seed(8701)
-B = 50
+B = 500
 size = dim(x.train.imp.mice)[1]
 
-B_coef_mice = matrix(NA, nrow = B, ncol = length(lasso_coef[,1]))
+B_coef_mice = matrix(NA, nrow = B, ncol = length(lasso_coef_mice[,1]))
 for (i in 1:B){
   boot_ind = sample(1:size, size = size, replace = TRUE)
   
@@ -773,14 +774,14 @@ B_coef_count_mice = ifelse(B_coef_mice == 0,0,1)
 barplot(apply(B_coef_count_mice, 2, sum)/B, las = 2)
 ```
 
-```{r, eval = F}
+```{r, echo = F}
 
 names_lasso_mice_70 <- names(apply(B_coef_count_mice, 2, sum)/B)[apply(B_coef_count_mice, 2, sum)/B > 0.7]
 names_lasso_mice_50 <- names(apply(B_coef_count_mice, 2, sum)/B)[apply(B_coef_count_mice, 2, sum)/B > 0.5]
-names_lasso_mice_70
-names_lasso_mice_50
+# names_lasso_mice_70
+# names_lasso_mice_50
 ```
-The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are 'r names_lasso_mice_70'.
+We ran the bootstrap using 'r B' iterations. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are 'r names_lasso_mice_70'.
 Similarly, by those to those who are included at least $50$\% of the time, we obtain 'r names_lasso_mice_50'.
 This is indeed similar to the ones we picked out earlier. 
 
@@ -791,7 +792,7 @@ The test data is therefore suitable for inference, as it has not been perturbed 
 
 We start out with the complete case models and fit a logistic model with the most important variables, namely 'r names_lasso_cc_70'.
 
-```{r complete case comparison, eval = F}
+```{r complete case comparison, echo = F}
 # Fit the model on the complete case training data.
 
 mod <- glm(TenYearCHD ~ age + male + sysBP + glucose, data = d.complete[-train,], family = binomial())
@@ -826,7 +827,7 @@ CI_mod0[14,2]-CI_mod0[14,1] - (CI_mod[4,2]-CI_mod[4,1])
 Similarly, we may fit a logistic model on the imputed data.
 We include the variables 'r names_lasso_mice_70' that was nonzero more than 70\% of the times in the bootstrap.
 
-```{r Inference for imputed data, eval = F}
+```{r Inference for imputed data, echo = F}
 # Add the response values that we took out for the mice data.
 
 d.test.imp.mice["TenYearCHD"] <- y.test
@@ -856,10 +857,20 @@ More or less, we obtain the same results, as it is the same covariates that come
 # Discussion
 
 When we set out, our goal was to explore imputation techniques and learn about 'MICE', single imputation, Lasso and bootstrapping with Lasso. 
-We first fit a logistic regression model on the complete case training set. 
+We first fit a logistic regression model on the complete case training set and then a Lasso on the complete case data set.
+Bootstrapping was used to see how often each variable was included in a Lasso model. 
+The variables that was present in at least $70$\% of the models, were 'r names_lasso_cc_70'. 
+As discussed in the exploratory analysis, some variables are included that are highly correlated to others. 
+For example, 'sysBP' has been included in every model we ran, and as mentioned, 'sysBP' is extremely correlated to 'diaBP', which probably forced 'diaBP' out of the model.
+If we select those variables that were in at least $50\%$ of the models, we obtain 'r names_lasso_cc_50', and we see that 'cigsPerDay' and 'prevalentHyp' is selected, as well.
+This is as expected, as these were some of the variables we mentioned could absorb some of the information from omitted variables, such as 'currentSmoker' and 'diaBP'.
 
-TODO:
-Write discussion
-Write intro
-Knit and fix the last parts regarding which code should be eval, echo, etc...
+The Lasso on imputed data chose 'r names_lasso_imp_70', which matches the complete case quite well. 
+
+Another interesting thing we discovered, was that even though we obtain good results with the imputed data, the data quality seems to go down, if only barely. 
+The sensitivity and specificity of the went down slightly when using the imputed data, but as the Lasso selects the same variables, it does not matter a lot for our purposes.
+The decrease in data quality should have been more visible if the percentage of imputed values were higher, or if we were in a not-so-data-rich setting.
+
+What we can probably conclude, is that the variables ''r names_lasso_cc_70'are the most significant, and that we may include 'cigsPerDay' or even 'prevalentHyp' if we want to.
+Lesson learned: Try to avoid becoming an old, smoking man with high blood pressure, and let 'mice' impute your data instead of doing it manually. 
 
