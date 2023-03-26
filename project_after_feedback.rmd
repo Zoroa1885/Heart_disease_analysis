@@ -39,7 +39,8 @@ We start by examining the data set.
 
 ```{r Loading Data, fig.width= 9, fig.height=6}
 # Load and look at data
-data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
+data <- read.csv("C:\\Heart_disease_analysis\\framingham.csv")
+# data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
 data_dim = dim(data)
 pos_response = sum(data$TenYearCHD==1)
 
@@ -71,7 +72,7 @@ grid.arrange(plot1, plot2, ncol=2)
 ```
 
 
-As we can see there are six covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.
+As we can see there are seven covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.
 We split the data into training and test sets, as well as copying the complete case data set for later solutions. 
 
 ```{r train-test split}
@@ -250,9 +251,9 @@ auc_cc
 
 ```
 
-The logistic regression model chooses `r names(which(summary(mod0)$coefficients[,4] < 0.01))` as the significant covariates, where the p-value cutoff is 0.01. It classifies very few positives correctly, which is very problematic if the model would be used to predict hearth disease. 
+The logistic regression model chooses `r names(which(summary(mod0)$coefficients[,4] < 0.05))` as the significant covariates, where the p-value cutoff is 0.05. It classifies very few positives correctly, which is very problematic if the model would be used to predict hearth disease. 
 
-## Should there be 0.01 or 0.05 above? 
+## Should we comment on whether or not we shoud do Group Lasso since Edu is included?
 
 
 
@@ -272,7 +273,7 @@ plot(cv.out, main = c("Binomial deviance for lambda",""))
 
 # Fit the Lasso model
 
-lasso_mod_cc = glmnet(x.train.complete, y.train.complete, family = "binomial",intercept = T, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
+lasso_mod_cc = glmnet(x.train.complete, y.train.complete, family = "binomial", intercept = T, standardize=TRUE, alpha = 1,  lasso = cv.out$lambda.1se)
 
 lasso_coef_cc <- coef(lasso_mod_cc,s=cv.out$lambda.1se)
 ```
@@ -335,7 +336,7 @@ names_lasso_cc_70 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_
 names_lasso_cc_50 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_cc, 2, sum)/B > 0.5]
 ```
 
-We ran the bootstrap using `r B` iterations. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_cc_70`.
+We ran the bootstrap constructing `r B` data sets. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_cc_70`.
 Similarly, by those to those who are included at least $50$\% of the time, we obtain `r names_lasso_cc_50`.
 This is indeed similar to the ones we picked out earlier. 
 
@@ -406,7 +407,7 @@ We suspect that the sensitivity and specificity is even lower for the `MICE`-imp
 
 # Inference
 
-In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping iterations in the earlier models, and now use the test data to fit a logistic model to avoid overfitting. Note that we have only used the test data to predict and observe different measures, such as ROC-AUC, sensitivity/specificity, and so on. 
+In order to do inference we simply fit a logistic regression model using the `glm` function in `R`, and extract the inference from there. However, we will keep the coefficients chosen by the lasso-bootstrapping procedure in the earlier models, and now use the test data to fit a logistic model to avoid overfitting. Note that we have only used the test data to predict and observe different measures, such as ROC-AUC, sensitivity/specificity, and so on. 
 The test data is therefore suitable for inference, as it has not been perturbed in the procedure of fitting the models.
 
 We start out with the complete case models and fit a logistic model with the most important variables, namely `r names_lasso_cc_70`.
