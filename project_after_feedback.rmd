@@ -267,7 +267,7 @@ mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
 
 After using lasso on `r B` data sets the variables that have nonzero coefficients in at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
 
-The box-plot tell a similar story. Only age and sysBP has coefficients who's 95\% confidence intervals does not include zero, further supporting their inclusion in the model. From the boxplot we see that the coefficients of cigsPerDay and prevelentHyp has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, maybe justifing their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of glucose, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could choose to lower this to 50\%, which would support the inclusion of cigsPerDay and prevelentHyp.
+The box-plot tell a similar story. Only `age` and `sysBP` has coefficients who's 95\% confidence intervals does not include zero, further supporting their inclusion in the model. From the boxplot we see that the coefficients of `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, maybe justifing their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could choose to lower this to 50\%, which would support the inclusion of `cigsPerDay` and `prevelentHyp`.
 
 ## Something about Mette's comment on how we did inference. 
 
@@ -324,7 +324,16 @@ summary(mod.imp)
 confint(mod.complete)
 confint(mod.imp)
 ```
-We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.  
+
+To account for the cherry picking in variables Lasso causes, we may calculate stricter p-values by multiplying them by the number of covariate choosen for the final model.
+```{r}
+summary(mod.complete)$coefficients[,4] * length(summary(mod.complete)$coefficients[,4])
+
+summary(mod.imp)$coefficients[,4] * length(summary(mod.imp)$coefficients[,4])
+```
+All coefficients continue to be significant after the adjustment for the complete model, although `glucose` are only barely so. For the imputed dataset, only `male` are no longer significant after the adjustment. This is a somewhat surprising result, since `male` where almost always included by the Lasso.
+
+We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.
 
 
 ```{r alternative model, eval = T, echo = T}
@@ -345,7 +354,7 @@ rownames(CI.mat) = c("Complete", "Imputed", "Alternative Imputed")
 abs(CI.mat)
 
 ```
-
+There is almost no change in AIC between the two models used on the imputed data set, indicating that it is the imputed data that reduces the performance of the model. 
 
 ## Finish this train of thought
 We did not use ROC-AUC to evaluate the model as both train and test data has been used to fit the final model. Hence, a third, independent data would be needed in order to run ROC-AUC calculations...
