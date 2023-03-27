@@ -62,7 +62,7 @@ This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariate
 
 The next thing we looked at was the number of missing data in our data set. We used the packages `ggmice` @R-ggmice, `naniar` @R-naniar, and `gridExtra` @R-gridExtra to produce the plots. 
 
-```{r plot missing data, fig.width=9, fig.height = 5}
+```{r plot_missing_data, fig.cap = "My plot", fig.width=9, fig.height = 5}
 # Look at the missing data
 library(ggmice) # plot_pattern()
 library(naniar) # gg_miss_var()
@@ -77,6 +77,8 @@ grid.arrange(plot1, plot2, ncol=2)
 
 
 As we can see there are seven covariates that contains missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`, where `glucose` is by far the covariate that has the most `NA`'s, with a total of `r round(gluc_miss*100,1)`\% missing values. We cannot use the rows that contain missing values as is. An option for handling the problem would be to remove all rows that contains `NA`'s, also called \textit{complete case analysis}. In this project we do a method called \emph{single imputation}, and compare it with the complete case analysis to investigate how imputing missing data can affect the subsequent inference. 
+
+See Figure \@ref(fig:plot_missing_data).
 
 Before beginning the imputation we have to split the data into two disjoint sets. We call them training and test set here, but because our goal is inference they will serve more as independent sets where one is used for covariate reduction and the other is used for estimating and inference. The same split is used for both the imputation method and complete method. 
 
@@ -176,11 +178,18 @@ imp_mod.train = mice(d.train, m=1, printFlag = F, method = meth)
 d.train.imp = complete(imp_mod.train)
 
 # Use the imputation model trained on the training set on the test set to avoid data leakage
+# Hva skjer med heartRate når vi bruker mice.reuse? 
 imp_mod.test = mice.reuse(imp_mod.train, d.test, printFlag = F)
 d.test.imp = imp_mod.test$"1"
 
 # Compare the density of imputed data vs. actual data in the training set
 densityplot(imp_mod.train)
+
+c1 <- rgb(173,216,230,max = 255, alpha = 95, names = "lt.blue")
+c2 <- rgb(255,192,203, max = 255, alpha = 95, names = "lt.pink")
+barplot(prop.table(table(d.train.complete$education)), col = c1, xlab = "Category", ylab = "Proportion of total samples", main = "Education: Observed and Imputed", ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
+barplot(prop.table(table(d.train.imp$education[is.na(d.train$education)])), col = c2, add = TRUE)
+legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 ```
 
 
@@ -202,24 +211,9 @@ x.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family =
 train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
-
-# Same for test data, but with training set attributes to avoid data leak: When do we use this? 
-# x.test.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.complete, family = binomial()), center = train.complete.mean, scale = train.complete.sd)
-# x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial()), center = train.imp.mean, scale = train.imp.sd)
-
 ```
 
 
-
-```{r Logistic Model, eval = F, fig.width= 4, fig.height=4}
-# Is it interesting to have a logistic regression model for reference? 
-# Given the binary response it is natural to consider fitting a logistic regression model to our data. Although we intend to use lasso, it is nice to start by fitting a regular logistic regression model on the complete case data to get an indication of which covariates that are most present, and for later comparison.
-mod0 <- glm(TenYearCHD ~ ., data = d.train.complete, family = binomial())
-summary(mod0)
-
-# Should we comment on whether or not we shoud do Group Lasso since Edu is included?
-
-```
 
 
 
@@ -301,7 +295,7 @@ abline(h=0.7,col="red", lty=2, lwd=3)
 mod.imp <- glm(TenYearCHD ~ age + male + sysBP + glucose + cigsPerDay, data = d.test.imp, family = binomial())
 ```
 
-The Lasso on the imputed data chooses `r coef70.imp`as the non-zero covariates, here also indicated in the right plot above. The performance of this model is quite similar to that of the complete case, but we note in particular that `cigsPerDay` and `glucose` are non-zero more often when using the imputed data. This could perhaps be a sign of correlation in the training data caused by the imputation. As before, we use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the "independent" imputed test data to estimate the coefficients. However, we question whether this might be a poor choice, as the training data were used to build the imputation model that were used to predict the missing values in the test set. 
+The Lasso on the imputed data chooses `r coef70.imp`as the non-zero covariates, here also indicated in the right plot above. The performance of this model is quite similar to that of the complete case, but we note in particular that `cigsPerDay`, `BPMeds` and `glucose` are non-zero more often when using the imputed data. This could perhaps be a sign of correlation in the training data caused by the imputation. As before, we use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the "independent" imputed test data to estimate the coefficients. However, we question whether this might be a poor choice, as the training data were used to build the imputation model that were used to predict the missing values in the test set. 
 
 
 # Inference
@@ -310,7 +304,7 @@ To access the two models we compute the AIC and look at the confidence intervals
 
 
 ```{r complete case comparison}
-table("Complete"=round(summary(mod.complete)$aic,2),
+data.frame("Complete"=round(summary(mod.complete)$aic,2),
       "Imputed" = round(summary(mod.imp)$aic,2))
 
 summary(mod.complete)
@@ -327,7 +321,18 @@ We see that the AIC evaluates the model fitted on imputed data to be worse. This
 mod.imp2 = glm(TenYearCHD ~ age + male + sysBP + glucose, data = d.test.imp, family = binomial())
 summary(mod.imp2)
 confint(mod.imp2)
-round(summary(mod.imp2)$aic,2)
+data.frame("Complete"=round(summary(mod.complete)$aic,2),
+      "Imputed" = round(summary(mod.imp)$aic,2),
+      "Alternative imputed" = round(summary(mod.imp2)$aic,2))
+
+CI.mat = matrix(NA, nrow = 3, ncol = 6) 
+CI.mat[1,] = c(round(confint(mod.complete)[,1]-confint(mod.complete)[,2],2),NA)
+CI.mat[2,] = c(round(confint(mod.imp)[,1]-confint(mod.imp)[,2],2))
+CI.mat[3,] = c(round(confint(mod.imp2)[,1]-confint(mod.imp2)[,2],2),NA)
+colnames(CI.mat) = names(coef(mod.imp))
+rownames(CI.mat) = c("Complete", "Imputed", "Alternative Imputed")
+abs(CI.mat)
+
 ```
 
 
@@ -336,11 +341,13 @@ We did not use ROC-AUC to evaluate the model as both train and test data has bee
 
 # Discussion
 
+
 When we compare the chosen coefficients from the complete case data compared to the imputed data, we see that they correspond. Thus, in a data-rich situation imputation may only introduce unnecessary variance, without having an immediate effect on the quality of the model or inference.
 
 Another interesting thing we discovered, was that even though we obtain good results with the imputed data, the data quality seems to go down, if only barely. 
 The sensitivity and specificity of the model went down slightly when using the imputed data, but as the Lasso selects the same variables, it does not matter a lot for our purposes.
 The decrease in data quality might have been more visible if the percentage of imputed values were higher, or if we were in a data-poor situation.
 
+Use the boxplot (sd not in 0 something ) instead of cutoff percentage for times they were non-zero...? 
 
 # References 
