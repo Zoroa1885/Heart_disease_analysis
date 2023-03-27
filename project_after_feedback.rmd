@@ -122,6 +122,12 @@ We define the data to be:
   \item missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$ (i.e. we don't have MCAR or MAR).
 \end{itemize}
 
+In other terms, if the data is MCAR, we expected that there is no correlation between the presence of missing data and the data itself. Consequently, removing data with missing components should cause no loss in information except the loss due to reduction in data quantity. This kind of missing data is may be caused by malfunction in the recording of data or system failures in the database where the data is stored. 
+
+If the data is MAR, then the probability of missing is the same within groups defined by the observed data. In this case, there is a system to how the data is missing which is dependent on the other variables in our data. In this case, naive methods like mean imputing would cause a loss in information. Methods that predict missing data from the rest of the data should compensate for MAR. 
+
+Lastly, if neither MCAR or MAR holds, then the data is MNAR. There is a pattern to the missing data caused by a unknow source. In the case of MNAR, any imputation method would yield a biased results if one used only the data at hand @buuren_flexible_2018.
+
 
 ```{r investigate MAR/MCAR}
 # We investigate the response variable for rows that has missing data 
