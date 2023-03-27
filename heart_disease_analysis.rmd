@@ -47,7 +47,8 @@ We start by examining the dataset.
 
 ```{r Loading Data, echo = T, fig.width= 4, fig.height=4, cex = 0.7}
 # Load and look at data
-data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
+#data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
+data <- read.csv("framingham.csv")
 
 data_dim = dim(data)
 pos_response = sum(data$TenYearCHD==1)
@@ -62,7 +63,19 @@ data$education = factor(data$education, labels = c("none","hs","college","post-g
 
 ```
 
-This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`. We will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we notice that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
+This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`. We will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we note that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
+
+We plot the number of negative and positive cases of in the dataset.
+
+```{r}
+response = data$TenYearCHD
+response[response == 1] = "positive"
+response[response == 0] = "negative"
+response = data.frame(TenYearCHD = response)
+
+ggplot(data = response, aes(TenYearCHD), main = "Frequency of postive vs. negative cases")+geom_bar()
+```
+There is a high number negative cases compared to positive one. This is important to take into account when choosing performance measure. In particular, we should refrain from using accuracy, as a model who predicts only negative would score high in this regard, but would be practice useless, since it would be unable to identify any positive cases. In practice, we would rather have a model that produces balanced predictions, at the sacrifice of some accuracy. ROC-AUC is a great measure to use for this purpose, since it takes into account both the specificity and sensitivity of the model; the true negative rate and the true positive rate, respectively. 
 
 The next thing we looked at was the number of missing data in our data set.
 
@@ -76,7 +89,7 @@ gg_miss_var(data)
 ```
 
 As we can see there are six covariates that has missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, and `BMI`. We cannot use the rows that contain missing values as is. The easiest solution is to remove all rows that contains `NA`'s. This is the \textit{complete case} solution.
-We split the data into training and test sets, as well as copying the complete case data set for later solutions. 
+We split the data into training and test sets, as well as keeping the complete case data set to later use it for comparison.
 
 ```{r train-test split, echo = T}
 # Split into training and test first
@@ -261,34 +274,48 @@ We then predict the missing values for imputation. For the logistic model fit to
 ``` {r Missing Data predictions, echo = T}
 set.seed(8701)
 # Predicting the values to impute for glucose on the training and test data.
-pred_glucose_train_m <- predict(fit_for_simp_glucose_m, newdata = train_data_to_pred_gluc_m) 
-pred_glucose_test_m <- predict(fit_for_simp_glucose_m, newdata = test_data_to_pred_gluc_m)
+pred_glucose_train_m <- predict(fit_for_simp_glucose_m,
+                                newdata = train_data_to_pred_gluc_m) 
+pred_glucose_test_m <- predict(fit_for_simp_glucose_m,
+                               newdata = test_data_to_pred_gluc_m)
 
 # Predicting the values to impute for cigsPerDay on the training and test data.
-pred_cigs_train_m <- predict(fit_for_simp_cigs_m, newdata = train_data_to_pred_cigs_m) 
-pred_cigs_test_m <- predict(fit_for_simp_cigs_m, newdata = test_data_to_pred_cigs_m)
+pred_cigs_train_m <- predict(fit_for_simp_cigs_m,
+                             newdata = train_data_to_pred_cigs_m) 
+pred_cigs_test_m <- predict(fit_for_simp_cigs_m,
+                            newdata = test_data_to_pred_cigs_m)
 
 # Predicting the values to impute for BMI on the training and test data.
-pred_BMI_train_m <- predict(fit_for_simp_BMI_m, newdata = train_data_to_pred_BMI_m) 
-pred_BMI_test_m <- predict(fit_for_simp_BMI_m, newdata = test_data_to_pred_BMI_m)
+pred_BMI_train_m <- predict(fit_for_simp_BMI_m,
+                            newdata = train_data_to_pred_BMI_m) 
+pred_BMI_test_m <- predict(fit_for_simp_BMI_m,
+                           newdata = test_data_to_pred_BMI_m)
 
 # Predicting the values to impute for totChol on the training and test data.
-pred_totChol_train_m <- predict(fit_for_simp_totChol_m, newdata = train_data_to_pred_totChol_m) 
-pred_totChol_test_m <- predict(fit_for_simp_totChol_m, newdata = test_data_to_pred_totChol_m)
+pred_totChol_train_m <- predict(fit_for_simp_totChol_m,
+                                newdata = train_data_to_pred_totChol_m) 
+pred_totChol_test_m <- predict(fit_for_simp_totChol_m,
+                               newdata = test_data_to_pred_totChol_m)
 
 # Predicting the values to impute for heartRate on the training and test data.
-pred_heartRate_train_m <- predict(fit_for_simp_heartRate_m, newdata = train_data_to_pred_heartRate_m) 
-pred_heartRate_test_m <- predict(fit_for_simp_heartRate_m, newdata = test_data_to_pred_heartRate_m)
+pred_heartRate_train_m <- predict(fit_for_simp_heartRate_m,
+                                  newdata = train_data_to_pred_heartRate_m) 
+pred_heartRate_test_m <- predict(fit_for_simp_heartRate_m,
+                                 newdata = test_data_to_pred_heartRate_m)
 
 # Predicting the classes to impute for BPMeds on the training and test data by first predicting numerical values in (0,1) and then classifying these to either 0 or 1. 
-pred_BPMeds_train_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = train_data_to_pred_BPMeds_m, type = "response") 
-pred_BPMeds_test_m_probs <- predict(fit_for_simp_BPMeds_m, newdata = test_data_to_pred_BPMeds_m, type = "response")
+pred_BPMeds_train_m_probs <- predict(fit_for_simp_BPMeds_m,
+                                     newdata = train_data_to_pred_BPMeds_m, type = "response") 
+pred_BPMeds_test_m_probs <- predict(fit_for_simp_BPMeds_m,
+                                    newdata = test_data_to_pred_BPMeds_m, type = "response")
 pred_BPMeds_train_m <- ifelse(pred_BPMeds_train_m_probs >= 0.5, 1, 0)
 pred_BPMeds_test_m <- ifelse(pred_BPMeds_test_m_probs >= 0.5, 1, 0)
 
 # Predicting the classes to impute for education on the training and test data.
-pred_edu_train_m <- predict(fit_for_simp_edu_m, newdata = train_data_to_pred_edu_m, type = "class") 
-pred_edu_test_m <- predict(fit_for_simp_edu_m, newdata = test_data_to_pred_edu_m, type = "class")
+pred_edu_train_m <- predict(fit_for_simp_edu_m,
+                            newdata = train_data_to_pred_edu_m, type = "class") 
+pred_edu_test_m <- predict(fit_for_simp_edu_m,
+                           newdata = test_data_to_pred_edu_m, type = "class")
 
 ```
 
@@ -320,17 +347,23 @@ abline(h = mean(x.train_dat_m$glucose), col = "red")
 
 # Point plot for cigsperday
 plot(x.train_dat_m$cigs, ylab = "Value of cigsPerDay", main = "cigsPerDay")
-points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_cigs_train_m)),pred_cigs_train_m, col = "orange", pch = 16)
+points(seq(1,length(x.train_dat_m[,1]),
+           length.out = length(pred_cigs_train_m)), 
+       pred_cigs_train_m, col = "orange", pch = 16)
 abline(h = mean(x.train_dat_m$cigsPerDay), col = "red")
 
 # Point plot for BMI
 plot(x.train_dat_m$BMI, ylab = "Value of BMI", main = "BMI")
-points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_BMI_train_m)),pred_BMI_train_m, col = "orange", pch = 16)
+points(seq(1,length(x.train_dat_m[,1]), 
+           length.out = length(pred_BMI_train_m)),
+       pred_BMI_train_m, col = "orange", pch = 16)
 abline(h = mean(x.train_dat_m$BMI), col = "red")
 
 # Point plot for totChol
 plot(x.train_dat_m$totChol, ylab = "Value of totChol", main = "totChol")
-points(seq(1,length(x.train_dat_m[,1]),length.out = length(pred_totChol_train_m)),pred_totChol_train_m, col = "orange", pch = 16)
+points(seq(1,length(x.train_dat_m[,1]),
+           length.out = length(pred_totChol_train_m)),
+       pred_totChol_train_m, col = "orange", pch = 16)
 abline(h = mean(x.train_dat_m$totChol), col = "red")
 
 # Point plot for heartRate
@@ -445,8 +478,7 @@ For less code, the `MICE` package could have been used, referring to the functio
 # Model
 
 In the model section we will consider the two data sets; the complete case and imputed case. Both data sets are further divided into a train and test set. 
-Since we want to do Lasso, we must standardize the data.
-The problem with this is data leakage. If we want to standardize the test data, we should standardize it using the mean and the standard deviation of the training data. Most importantly, using the test data to scale the test data will introduce correlation between the independent observations of the test set.
+It is common to standardize the data when doing Lasso, which centeres the data about the origin, such that the least square estimate of the intercept is zero, $\hat{\beta}_0 = 0$. This effectively allows us the drop the intercept, such that we only meassure the effect of the covariates on the response. However, the problem with this is data leakage. If we want to standardize the test data, we should standardize it using the mean and the standard deviation of the training data. Most importantly, using the test data to scale the test data will introduce correlation between the independent observations of the test set.
 Since the scaling information from the test set is "not available" to us at the time of training, we cannot expect the coefficients in the Lasso to be appropriately scaled compared to the test data.
 We solve this by scaling the training data, and then using the attributes of the training data to scale the test data accordingly.
 
