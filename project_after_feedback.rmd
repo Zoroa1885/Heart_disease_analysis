@@ -112,7 +112,7 @@ The complete data set contains `r sum(complete.cases(data))` observations and th
 We start by recalling that there are several types of mechanisms for missing data.
 Let $Z = (X,y)$ denote the full collection of covariates and responses, respectively, and we let a subscript mis/obs indicate whether we are restricting $Z$ (or $X$) to the missing or observed parts, respectively.
 We may form an indicator (0-1) matrix $R$ indicating missing (0) and observed (1) covariates. 
-Assume $\psi$ is short for the parameters in the distribution of $R$.
+Assume $\psi$ is short for the parameters in the distribution of $R$. 
 
 The missing data may be characterized by the conditioning in the distribution of $R$.
 We define the data to be:
@@ -202,12 +202,15 @@ In this section we fit the same model on both the imputed and complete training 
 ```{r complete train test, echo = T}
 # Scale data for lasso
 
-x.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
+x.train.complete = scale(model.matrix(TenYearCHD ~ . -1,
+                                      data = d.train.complete,
+                                      family = binomial())) 
 train.complete.mean = attr(x.train.complete, "scaled:center")
 train.complete.sd = attr(x.train.complete, "scaled:scale")
 y.train.complete = d.train.complete$TenYearCHD
 
-x.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family = binomial()))
+x.train.imp = scale(model.matrix(TenYearCHD ~ . -1,
+                                 data = d.train.imp, family = binomial()))
 train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
@@ -235,7 +238,8 @@ for (i in 1:B){
   x = x.train.complete[B.data,]
   y = y.train.complete[B.data]
   cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
-  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, intercept = T, lasso = cv.out$lambda.1se)
+  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, 
+                     intercept = T, lasso = cv.out$lambda.1se)
   
   B.coef.complete[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
 }
@@ -246,12 +250,15 @@ coef70.complete <- names(apply(B.coef.count.complete, 2, sum)/B)[apply(B.coef.co
 
 # We do not include intercept as it is always in the model and too large to fit in the scaling.
 par(mfrow = c(1,2))
-boxplot.matrix(B.coef.complete[,-1], ylim = c(-0.25,0.55), las = 2, main = "Boxplot of estimated coefficients")
-barplot(apply(B.coef.count.complete, 2, sum)/B, las = 2, main = "Percentage of times coefficient was nonzero")
+boxplot.matrix(B.coef.complete[,-1], ylim = c(-0.25,0.55),
+               las = 2, main = "Boxplot of estimated coefficients")
+barplot(apply(B.coef.count.complete, 2, sum)/B,
+        las = 2, main = "Percentage of times coefficient was nonzero")
 abline(h=0.7,col="red", lty=2, lwd=3)
 
 # Fit a logistic model using the test data and chosen covariates
-mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose, data = d.test.complete, family = binomial())
+mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
+                    data = d.test.complete, family = binomial())
 ```
 
 After using lasso on `r B` data sets the variables that have nonzero coefficients in at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
