@@ -65,7 +65,7 @@ data$education = factor(data$education, labels = c("none","hs","college","post-g
 
 This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`. We will try to fit a logistic regression model. The response variable has `r pos_response` observations that are 1, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. Most of our covariates are either binary, or numeric. However, we note that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
 
-We plot the number of negative and positive cases of in the dataset.
+We plot the number of negative and positive cases in the dataset.
 
 ```{r}
 response = data$TenYearCHD
@@ -73,7 +73,9 @@ response[response == 1] = "positive"
 response[response == 0] = "negative"
 response = data.frame(TenYearCHD = response)
 
-ggplot(data = response, aes(TenYearCHD), main = "Frequency of postive vs. negative cases")+geom_bar()
+ggplot(data = response, aes(TenYearCHD))+
+  geom_bar()+
+  ggtitle("Frequency of postive vs. negative cases")
 ```
 There is a high number negative cases compared to positive one. This is important to take into account when choosing performance measure. In particular, we should refrain from using accuracy, as a model who predicts only negative would score high in this regard, but would be practice useless, since it would be unable to identify any positive cases. In practice, we would rather have a model that produces balanced predictions, at the sacrifice of some accuracy. ROC-AUC is a great measure to use for this purpose, since it takes into account both the specificity and sensitivity of the model; the true negative rate and the true positive rate, respectively. 
 
@@ -490,7 +492,9 @@ set.seed(8701)
 
 # Scale complete data for training
 
-x.train.complete = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.complete, family = binomial())) 
+x.train.complete = scale(model.matrix(TenYearCHD ~ . -1,
+                                      data = d.train.complete,
+                                      family = binomial())) 
 train.complete.mean = attr(x.train.complete, "scaled:center")
 train.complete.sd = attr(x.train.complete, "scaled:scale")
 
@@ -498,13 +502,18 @@ y.train.complete = d.train.complete$TenYearCHD
 
 # Imputed data training set scaling
 
-x.train.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.train.imp, family = binomial()))
+x.train.imp = scale(model.matrix(TenYearCHD ~ . -1,
+                                 data = d.train.imp,
+                                 family = binomial()))
 train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
 
 # Same for imputed test data, but depending on training set attributes.
-x.test.imp = scale(model.matrix(TenYearCHD ~ . -1, data = d.test.imp, family = binomial()), center = train.imp.mean, scale = train.imp.sd)
+x.test.imp = scale(model.matrix(TenYearCHD ~ . -1,
+                                data = d.test.imp,
+                                family = binomial()),
+                   center = train.imp.mean, scale = train.imp.sd)
 
 ```
 
@@ -580,7 +589,7 @@ names_lasso_coef = names(which(lasso_coef_cc[,1] > 0))
 
 ```
 
-The Lasso on the complete case data chooses `r names_lasso_coef` as the significant covariates. 
+The Lasso on the complete case data chooses `r names_lasso_coef` as the covariates to include in the model. 
 Initially, this is the same lasso model is much better at classifying positives than the full logistic model and has only slightly worse AUC, at `r auc_lasso_cc` for the Lasso versus `r auc_cc` for the logistic model. We see that the Lasso includes `prevalentHyp`, while the logistic model finds it almost significant, with p-value 
 `r summary(mod0)$coefficients[11,4]`.
 This agrees with the reasoning we made earlier, saying it could be an important parameter, but not as important as (either) `sysBP` or `diaBP`.
@@ -614,14 +623,14 @@ names_lasso_cc_70 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_
 names_lasso_cc_50 <- names(apply(B_coef_count_cc, 2, sum)/B)[apply(B_coef_count_cc, 2, sum)/B > 0.5]
 ```
 
-We ran the bootstrap using `r B` iterations. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_cc_70`.
+We ran the bootstrap using `r B` date sets. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_cc_70`.
 Similarly, by those to those who are included at least $50$\% of the time, we obtain `r names_lasso_cc_50`.
 This is indeed similar to the ones we picked out earlier. 
 
 ## Lasso on Imputed Data
 
 We now do the same thing, just using the imputed data instead of the complete case. 
-Even though the imputed data includes more samples, the data quality is going down when we impute. 
+Even though the imputed data includes more samples, the data quality might be reduced when we impute when we impute. There are several possible reasons for this. Firstly imputing always involves some degree of uncertainty, which may introduce a larger degree of noise to the data. Depending on the imputation method, it is possible to introduce bias into the date set. This is especially the case when using naive imputation methods, like mean imputation. For this reason, we use more advanced techniques that predict rather than estimate the missing values. 
 
 To get hands-on experience with the `MICE` package, we also construct an imputed data set using `mice` and `mice.reuse`, for comparison. 
 `mice` can be used on the entire training data, without needing to remove those samples with two or more covariates missing. 
@@ -694,7 +703,7 @@ names_lasso_coef_imp = names(which(lasso_coef_imp[,1] > 0))
 ```
 
 The performance of this model is quite similar to that of the complete case, which is to be expected.
-The Lasso on the manually imputed data chooses `r names_lasso_coef_imp` as the significant covariates. 
+The Lasso on the manually imputed data chooses `r names_lasso_coef_imp` as the covariates to include in the model. 
 
 Recall that the sensitivity can be measured by the true positive rate (i.e. the number of true positives over all positives) and the specificity can be measured by the true negative rate (i.e. true negative over all negative).
 Comparing the Lasso on the complete case data with the imputed data, we note that we have sensitivity `r sens_cc` in the complete case and sensitivity `r sens_imp` in the imputed case.
@@ -741,7 +750,7 @@ names_coef_mice = names(which(lasso_coef_mice[,1] > 0))
 ```
 
 The predictive performance has not changed a lot, in the eyes of AUC. The performance of this model is quite similar to that of the complete case, which is to be expected.
-The Lasso on the `MICE`-imputed data chooses `r names_coef_mice` as the significant covariates. 
+The Lasso on the `MICE`-imputed data chooses `r names_coef_mice` as the covariates to include in the model. 
 
 We suspect that the sensitivity and specificity is even lower for the `MICE`-imputed data, as it also imputes those with more than one missing value.
 
