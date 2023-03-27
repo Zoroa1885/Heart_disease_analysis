@@ -202,7 +202,7 @@ legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 
 # Model
 
-In this section we fit the same model on both the imputed and complete training data. The two data sets are indentical apart from the rows that contained `NA`'s. Since we want to do lasso, we first standardize the data. Secondly, we use bootstrap to calculate the non-zero coefficients multiple times. Lastly, we fit a logistic regression model using the test set.
+In this section we fit the same model on both the imputed and complete training data. The two data sets are identical apart from the rows that contained `NA`'s. Since we want to do lasso, we first standardize the data. Secondly, we use bootstrap to calculate the non-zero coefficients multiple times. Lastly, we fit a logistic regression model using the test set.
 
 
 ```{r complete train test, echo = T}
@@ -221,9 +221,6 @@ train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
 ```
-
-
-
 
 
 ## Lasso on complete data 
