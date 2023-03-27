@@ -630,11 +630,11 @@ This is indeed similar to the ones we picked out earlier.
 ## Lasso on Imputed Data
 
 We now do the same thing, just using the imputed data instead of the complete case. 
-Even though the imputed data includes more samples, the data quality might be reduced when we impute when we impute. There are several possible reasons for this. Firstly imputing always involves some degree of uncertainty, which may introduce a larger degree of noise to the data. Depending on the imputation method, it is possible to introduce bias into the date set. This is especially the case when using naive imputation methods, like mean imputation. For this reason, we use more advanced techniques that predict rather than estimate the missing values. 
+Even though the imputed data includes more samples, the data quality might be reduced when we impute. There are several possible reasons for this. Firstly imputing always involves some degree of uncertainty, which may introduce a larger degree of noise to the data. Depending on the imputation method, it is possible to introduce bias into the date set. This is especially the case when using naive imputation methods, like mean imputation. For this reason, we use more advanced techniques that predict rather than estimate the missing values. 
 
 To get hands-on experience with the `MICE` package, we also construct an imputed data set using `mice` and `mice.reuse`, for comparison. 
 `mice` can be used on the entire training data, without needing to remove those samples with two or more covariates missing. 
-The imputation model from the training set is emplyed to impute the test set as well, to avoid data leakage. 
+The imputation model from the training set is employed to impute the test set as well, to avoid data leakage. 
 
 ```{r Imputation with mice, echo = T}
 set.seed(8701)
@@ -791,7 +791,7 @@ barplot(apply(B_coef_count_mice, 2, sum)/B, las = 2, main = "Percentage of times
 names_lasso_mice_70 <- names(apply(B_coef_count_mice, 2, sum)/B)[apply(B_coef_count_mice, 2, sum)/B > 0.7]
 names_lasso_mice_50 <- names(apply(B_coef_count_mice, 2, sum)/B)[apply(B_coef_count_mice, 2, sum)/B > 0.5]
 ```
-We ran the bootstrap using `r B` iterations. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_mice_70`.
+We ran the bootstrap using `r B` re-sampled data sets. The variables that have nonzero coefficients in the Lasso models at least 70\% of the time, are `r names_lasso_mice_70`.
 Similarly, by those to those who are included at least $50$\% of the time, we obtain `r names_lasso_mice_50`. This is indeed similar to the ones we picked out earlier. 
 
 # Inference
