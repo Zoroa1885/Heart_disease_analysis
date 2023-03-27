@@ -306,16 +306,12 @@ The Lasso on the imputed data chooses `r coef70.imp`as the non-zero covariates, 
 
 # Inference
 
-To access the two models we compute the AIC and look at the confidence intervals from the model. We see that the AIC evaluates the model fitted on imputed data to be worse than 
+To access the two models we compute the AIC and look at the confidence intervals from the model. 
 
 
 ```{r complete case comparison}
 table("Complete"=round(summary(mod.complete)$aic,2),
       "Imputed" = round(summary(mod.imp)$aic,2))
-
-# Check the AIC when using the same covariates? 
-mod.imp2 = glm()
-
 
 summary(mod.complete)
 summary(mod.imp)
@@ -323,14 +319,20 @@ summary(mod.imp)
 confint(mod.complete)
 confint(mod.imp)
 ```
+We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.  
 
 
-```{r alternative model, eval = F, echo = F}
-mod.imp2 = glm(TenYearCHD ~ age + male + sysBP + glucose + cigsPerDay, data = d.test.complete, family = binomial())
+```{r alternative model, eval = T, echo = T}
+# Check the AIC when using the same covariates? 
+mod.imp2 = glm(TenYearCHD ~ age + male + sysBP + glucose, data = d.test.imp, family = binomial())
 summary(mod.imp2)
 confint(mod.imp2)
+round(summary(mod.imp2)$aic,2)
 ```
 
+
+## Finish this train of thought
+We did not use ROC-AUC to evaluate the model as both train and test data has been used to fit the final model. Hence, a third, independent data would be needed in order to run ROC-AUC calculations...
 
 # Discussion
 
