@@ -186,7 +186,11 @@ d.test.imp = complete(imp_mod.test)
 # Compare the density of imputed data vs. actual data in the training set
 densityplot(imp_mod.train)
 densityplot(imp_mod.test)
-par(mfrow = c(1,2))
+
+```
+
+```{r edu figures, fig.width=8, fig.height=4.5}
+par(mfrow = c(1,2),cex.main = 0.8, cex.lab = 0.8, cex.axis = 0.7)
 c1 <- rgb(173,216,230, max = 255, alpha = 95, names = "lt.blue")
 c2 <- rgb(255,192,203, max = 255, alpha = 95, names = "lt.pink")
 barplot(prop.table(table(d.train.complete$education)), col = c1, xlab = "Category", ylab = "Proportion of total samples", main = "Train Education: Observed and Imputed", ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
@@ -195,7 +199,7 @@ legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 
 barplot(prop.table(table(d.test.complete$education)), col = c1, xlab = "Category", ylab = "Proportion of total samples", main = "Test Education: Observed and Imputed", ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
 barplot(prop.table(table(d.test.imp$education[is.na(d.train$education)])), col = c2, add = TRUE)
-legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
+legend("topright", legend=c("Complete", "Imputed"), cex = 1, pch=15,col=c(c1,c2))
 ```
 As can be seen from the density plots, our imputation is mostly yielding imputations around the mean, but with some added variance. Both sets have some deviance from the observed proportions when it comes to imputation of the categorical variable `education`, which are unsure how to explain. Furthermore, although the imputation of `cigsPerDay` may appear strange, it makes sense as all missing observations in that variable also had responded positive to `currentSmoker`. The imputation of `cigsPerDay` seems to be about the mean of non-zero values, thus showcasing a similar behavior as the other imputed data.  
 
