@@ -30,13 +30,13 @@ knitr::opts_chunk$set(echo = TRUE,
 
 # Introduction
 
-In this project we have studied the [Framingham Coronary Heart Disease Dataset](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression?fbclid=IwAR1LE3P3vM1SyHBifotrNdXoKGv7szGR07labEAQo6XUqV9Pi90vtAp4mS4) which can be found on kaggle @noauthor_logistic_nodate. This dataset contains patient information for inhabitants in Framingham, Massachusetts, and is typically used to predict the chance of getting coronary heart disease (CHD) within the next 10 years. 
+In this project we have studied the [Framingham Coronary Heart Disease Dataset](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression?fbclid=IwAR1LE3P3vM1SyHBifotrNdXoKGv7szGR07labEAQo6XUqV9Pi90vtAp4mS4) which can be found on Kaggle @noauthor_logistic_nodate. The dataset contains patient information for inhabitants in Framingham, Massachusetts, and is typically used to predict the chance of getting coronary heart disease (CHD) within the next 10 years. 
 
-For this project, however, we intend to investigate how to handle missing data in combination with lasso and bootstrapping as a method for making inference about the variables. We first do single regression imputation using the package called `mice` (@R-mice). Our emphasis is on how to avoid data leakage in our procedure. Afterwards we investigate how imputation may affect the subsequent lasso regression, which is done multiple times using bootstrap. Lastly we fit a logistic regression model with the covariates chosen from the lasso procedure using an independent data set, and compare the model based on the imputed and complete data set. 
+For this project, however, we intend to investigate how to handle missing data in combination with lasso and bootstrapping as a method for making inference about the variables. We first do single regression imputation using the package called `mice` (@R-mice). The emphasis is on how to avoid data leakage in our procedure. Afterwards we investigate how imputation may affect the subsequent lasso regression, which is done multiple times using bootstrap. Lastly we fit a logistic regression model with the covariates chosen from the lasso procedure(s) using an independent data set, and compare the model based on the imputed and complete data sets. 
 
 ## Exploratory Analysis
 
-We start by examining the data set. We use the packages `ggplot2` (@R-ggplot2) and `tidyr` (@R-tidyr) to make the plots. 
+We start by examining the data set. We use the packages `ggplot2` (@R-ggplot2) and `tidyr` (@R-tidyr) to plot. 
 
 ```{r extra, eval = F, echo = F}
 #data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
@@ -79,9 +79,9 @@ grid.arrange(plot1, plot2, ncol=2)
 ```
 
 
-As we can see there are seven covariates that contains missing data: `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`, where `glucose` is by far the covariate that has the most `NA`'s, with a total of `r round(gluc_miss*100,1)`\% missing values. We cannot use the rows that contain missing values as is. An option for handling the problem would be to remove all rows that contains `NA`'s, also called \textit{complete case analysis}. In this project we do a method called \emph{single imputation}, and compare it with the complete case analysis to investigate how imputing missing data can affect the subsequent inference. 
+As we can see there are seven covariates that contains missing data; `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`, where `glucose` is by far the covariate that has the most `NA`'s, with a total of `r round(gluc_miss*100,1)`\% missing values. We cannot use the rows that contain missing values as is. An option for handling the problem would be to remove all rows that contains `NA`'s, also called \textit{complete case analysis}. In this project we use \emph{single imputation}, and compare it with the complete case analysis to investigate how imputing missing data can affect the subsequent inference. 
 
-Before beginning the imputation we have to split the data into two disjoint sets. We call them training and test set here, but because our goal is inference they will serve more as independent sets where one is used for covariate reduction and the other is used for estimating and inference. The same split is used for both the imputation method and complete method. 
+Before beginning the imputation we have to split the data into two disjoint sets. We call them training and test set here, but because our goal is inference they will serve more as independent sets where one is used for covariate reduction and the other is used for estimation and inference. The same split is used for both the imputation method and complete method. 
 
 ```{r train-test split}
 # Split into training and test first to avoid data leakage
@@ -102,7 +102,7 @@ d.test.complete <- d.test[complete.cases(d.test), ]
 pos_response_c = sum(data[complete.cases(data),]$TenYearCHD==1)
 ```
 
-The complete data set contains `r sum(complete.cases(data))` observations and the response variable has `r pos_response_c` positive responses, which equals about `r round(pos_response_c/sum(complete.cases(data))*100,1)`\% of the total observations. As we can see, the proportion of positive observations in the response is the same, which is a good indicator that our data is missing at random (MAR), which we will come back to.
+The complete data set contains `r sum(complete.cases(data))` observations and the response variable has `r pos_response_c` positive responses, which equals about `r round(pos_response_c/sum(complete.cases(data))*100,1)`\% of the total observations. The proportion of positive observations in the response is the same, which is a good indicator that our data is missing at random (MAR), which we will come back to.
 
 
 # Missing Data
