@@ -267,7 +267,7 @@ mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
                     data = d.test.complete, family = binomial())
 ```
 
-After using lasso on `r B` data sets the variables that have nonzero coefficients in at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
+After using lasso on `r B` data sets the variables that have nonzero coefficients at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
 
 The box-plot tell a similar story. Only `age` and `sysBP` has coefficients who's 95\% confidence intervals does not include zero, further supporting their inclusion in the model. From the boxplot we see that the coefficients of `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, maybe justifing their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could choose to lower this to 50\%, which would support the inclusion of `cigsPerDay` and `prevelentHyp`.
 
