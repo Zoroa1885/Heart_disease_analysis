@@ -42,7 +42,8 @@ We start by examining the data set. We use the packages `ggplot2` @R-ggplot2 and
 
 ```{r Loading Data, fig.width= 9, fig.height=6}
 # Load and look at data
-data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
+#data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
+data <- read.csv("framingham.csv")
 data_dim = dim(data)
 pos_response = sum(data$TenYearCHD==1)
 
@@ -122,6 +123,12 @@ We define the data to be:
   \item missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$ (i.e. we don't have MCAR or MAR).
 \end{itemize}
 
+In other terms, if the data is MCAR, we expected that there is no correlation between the presence of missing data and the data itself. Consequently, removing data with missing components should cause no loss in information except the loss due to reduction in data quantity. This kind of missing data is may be caused by malfunction in the recording of data or system failures in the database where the data is stored. 
+
+If the data is MAR, then the probability of missing is the same within groups defined by the observed data. In this case, there is a system to how the data is missing which is dependent on the other variables in our data. In this case, naive methods like mean imputing would cause a loss in information. Methods that predict missing data from the rest of the data should compensate for MAR. 
+
+Lastly, if neither MCAR or MAR holds, then the data is MNAR. There is a pattern to the missing data caused by a unknow source. In the case of MNAR, any imputation method would yield a biased results if one used only the data at hand @buuren_flexible_2018.
+
 
 ```{r investigate MAR/MCAR}
 # We investigate the response variable for rows that has missing data 
@@ -196,7 +203,7 @@ legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 
 # Model
 
-In this section we fit the same model on both the imputed and complete training data. The two data sets are indentical apart from the rows that contained `NA`'s. Since we want to do lasso, we first standardize the data. Secondly, we use bootstrap to calculate the non-zero coefficients multiple times. Lastly, we fit a logistic regression model using the test set.
+In this section we fit the same model on both the imputed and complete training data. The two data sets are identical apart from the rows that contained `NA`'s. Since we want to do lasso, we first standardize the data. Secondly, we use bootstrap to calculate the non-zero coefficients multiple times. Lastly, we fit a logistic regression model using the test set.
 
 
 ```{r complete train test, echo = T}
@@ -215,9 +222,6 @@ train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
 ```
-
-
-
 
 
 ## Lasso on complete data 
@@ -263,9 +267,9 @@ mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
 
 After using lasso on `r B` data sets the variables that have nonzero coefficients in at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
 
-## Something about Mette's comment on how we did inference. 
+The box-plot tell a similar story. Only `age` and `sysBP` has coefficients who's 95\% confidence intervals does not include zero, further supporting their inclusion in the model. From the boxplot we see that the coefficients of `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, maybe justifing their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could choose to lower this to 50\%, which would support the inclusion of `cigsPerDay` and `prevelentHyp`.
 
-## Should we say something about the boxplot as well? 
+## Something about Mette's comment on how we did inference. 
 
 
 ## Lasso on imputed data
@@ -320,7 +324,16 @@ summary(mod.imp)
 confint(mod.complete)
 confint(mod.imp)
 ```
-We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.  
+
+To account for the cherry picking in variables Lasso causes, we may calculate stricter p-values by multiplying them by the number of covariate choosen for the final model.
+```{r}
+summary(mod.complete)$coefficients[,4] * length(summary(mod.complete)$coefficients[,4])
+
+summary(mod.imp)$coefficients[,4] * length(summary(mod.imp)$coefficients[,4])
+```
+All coefficients continue to be significant after the adjustment for the complete model, although `glucose` are only barely so. For the imputed dataset, only `male` are no longer significant after the adjustment. This is a somewhat surprising result, since `male` where almost always included by the Lasso.
+
+We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.
 
 
 ```{r alternative model, eval = T, echo = T}
@@ -341,7 +354,7 @@ rownames(CI.mat) = c("Complete", "Imputed", "Alternative Imputed")
 abs(CI.mat)
 
 ```
-
+There is almost no change in AIC between the two models used on the imputed data set, indicating that it is the imputed data that reduces the performance of the model. 
 
 ## Finish this train of thought
 We did not use ROC-AUC to evaluate the model as both train and test data has been used to fit the final model. Hence, a third, independent data would be needed in order to run ROC-AUC calculations...
