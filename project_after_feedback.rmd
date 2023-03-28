@@ -34,11 +34,11 @@ knitr::opts_chunk$set(echo = TRUE,
 
 In this project we have studied the [Framingham Coronary Heart Disease Dataset](https://www.kaggle.com/datasets/dileep070/heart-disease-prediction-using-logistic-regression?fbclid=IwAR1LE3P3vM1SyHBifotrNdXoKGv7szGR07labEAQo6XUqV9Pi90vtAp4mS4) which can be found on kaggle @noauthor_logistic_nodate. This dataset contains patient information for inhabitants in Framingham, Massachusetts, and is typically used to predict the chance of getting coronary heart disease (CHD) within the next 10 years. 
 
-For this project, however, we intend to investigate how to handle missing data in combination with lasso as a method for making inference about the variables. We will do single regression imputation using the package called `mice` @R-mice, and investigate how imputation may affect the subsequent lasso regression. 
+For this project, however, we intend to investigate how to handle missing data in combination with lasso as a method for making inference about the variables. We will do single regression imputation using the package called `mice` (@R-mice), and investigate how imputation may affect the subsequent lasso regression. 
 
 ## Exploratory Analysis
 
-We start by examining the data set. We use the packages `ggplot2` @R-ggplot2 and `tidyr` @R-tidyr to make the plots. 
+We start by examining the data set. We use the packages `ggplot2` (@R-ggplot2) and `tidyr` (@R-tidyr) to make the plots. 
 
 ```{r Loading Data, fig.width= 9, fig.height=6}
 # Load and look at data
@@ -61,7 +61,7 @@ data$education = factor(data$education, labels = c("none","hs","college","post-g
 
 This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, indicating that a natural model choice is a logistic regression model. The response variable has `r pos_response` positive observations, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. We see from the plot that most of our covariates are either binary, or numeric. However, we note that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
 
-The next thing we looked at was the number of missing data in our data set. We used the packages `ggmice` @R-ggmice, `naniar` @R-naniar, and `gridExtra` @R-gridExtra to produce the plots. 
+The next thing we looked at was the number of missing data in our data set. We used the packages `ggmice` (@R-ggmice), `naniar` (@R-naniar), and `gridExtra` (@R-gridExtra) to produce the plots. 
 
 ```{r plot_missing_data, fig.cap = "My plot", fig.width=9, fig.height = 5}
 # Look at the missing data
@@ -123,16 +123,15 @@ We define the data to be:
   \item missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$ (i.e. we don't have MCAR or MAR).
 \end{itemize}
 
-In other terms, if the data is MCAR, we expected that there is no correlation between the presence of missing data and the data itself. Consequently, removing data with missing components should cause no loss in information except the loss due to reduction in data quantity. This kind of missing data is may be caused by malfunction in the recording of data or system failures in the database where the data is stored. 
+In other terms, if the data is MCAR, we expect correlation between the missingness of data and the data itself. Consequently, removing data with missing components should cause no loss in information except the loss due to reduction in data quantity. This kind of missing data is may be caused by malfunction in the recording of data or system failures in the database where the data is stored. 
 
-If the data is MAR, then the probability of missing is the same within groups defined by the observed data. In this case, there is a system to how the data is missing which is dependent on the other variables in our data. In this case, naive methods like mean imputing would cause a loss in information. Methods that predict missing data from the rest of the data should compensate for MAR. 
+If the data is MAR, then the structure explaining if the data is missing is dependent on the other variables in our data. In this case, naive methods like mean imputing would cause a loss in information, although we expect methods that predict missing data from the rest of the data to compensate for MAR. 
 
-Lastly, if neither MCAR or MAR holds, then the data is MNAR. There is a pattern to the missing data caused by a unknow source. In the case of MNAR, any imputation method would yield a biased results if one used only the data at hand @buuren_flexible_2018.
-
+For MNAR, there is a pattern to the missing data caused by a unknown source. In the case of MNAR, any imputation method would yield a biased results if one used only the data at hand (@buuren_flexible_2018).
 
 
 ```{r investigate MAR/MCAR}
-# We investigate the response variable for rows that has missing data 
+# We investigate the frequency of the response variable for rows that has missing data 
 x = which(colSums(is.na(data)) > 0)
 M = matrix(nrow=2, ncol = length(x)+1)
 
@@ -148,43 +147,30 @@ for (i in 1:length(x)){
 
 M[2,length(x)+1] = round(sum(data$TenYearCHD)/length(data$TenYearCHD),3)
 colnames(M) = c(colnames(data)[colSums(is.na(data)) > 0],"full")
-rownames(M) = c("miss", "resp")
+rownames(M) = c("# miss", "response freq")
 as.table(M)
 ```
+As `round(100*pos_response/dim(data[1])[1],3)`\% of the reponses are $1$, we should expect MAR-behaviour if the response in samples with missing values exhibit a frequency around $15$\% for each variable missing. Note that this should not be taken too strictly if the number of samples missing varable $X$ is low. 
+Since `BMI`, and `heartRate` misses this quite a bit, MNAR tendencies could be present, but due to the extremely low number of missing values for these ($19$ and $1$, respectively), we see now reason to stray away from MAR.
 
-```{r further investigate MAR/MCAR}
-d.pos <- subset(data, TenYearCHD == 1)
-d.neg <- subset(data, TenYearCHD == 0)
-na.pos <- colSums(apply(d.pos,2,is.na))
-na.neg <- colSums(apply(d.neg,2,is.na))
-
-M = matrix(NA,nrow = 2, ncol = 16)
-
-M[1,] = round(na.pos/dim(d.pos)[1],3)
-M[2,] = round(na.neg/dim(d.neg)[1],3)
-colnames(M) = colnames(d.pos)
-rownames(M) = c("1", "0")
-M[,x]
-```
-By exploring the missing pattern of for example the variable `cigsPerDay`, we see that our missing mechanism is not MCAR.
-No non-smoker has failed to answer the question ''How may cigarettes do you smoke a day?'', which is a question only aimed at smokers. 
+By exploring the data of the variable `cigsPerDay`, we see that our missing mechanism is not MCAR.
+No non-smoker has failed to answer the question ''How may cigarettes do you smoke a day?'', a question only aimed at smokers. 
 The simple explanation may be that the survey automatically fills in $0$ for `cigsPerDay` if you claim to be a non-smoker. 
-In more mathematical terms, the missingness of `cigsPerDay` depends on the observed answer to ''Do you smoke?'' (found in variable `currentSmoker`), indicating that we do not work with MCAR data. Luckily, most methods are applicable if our missingness is at least MAR. 
+In more mathematical terms, the missingness of `cigsPerDay` depends on the observed answer to ''Do you smoke?'' (found in variable `currentSmoker`), indicating that we do not work with MCAR data. Luckily, most methods are applicable if our missingness is at least MAR.
+On the other hand, a high number of (not reported) `cigsPerDay` could be a reason not to answer the question, which is a tendency of MNAR. 
 
-We will assume that the missing mechanism is MAR for all our missing observations, as there is no clear reason to suspect it to be MNAR. 
+To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubin's rules needs to be combined with the Lasso, bootstrap and concluding inference. Multiple imputation was therefore considered to be beyond the scope of this project.
 
-To treat the missing data, we will use single imputation, as multiple imputation may cause difficulties with the resulting inference, as Rubin's rules needs to be combined with the Lasso, bootstrap and concluding inference. Multiple imputation was therefore not considered because it is beyond the scope of this project.
-
-To perform single imputation we will use regression imputation, where we adapt our regression technique depending on the type of variable imputed.
+To perform single imputation we use regression imputation, where we adapt our regression technique depending on the type of variable imputed.
 
 Our data is split into training and test sets, with the test-to-training ratio being 3:7. In order to avoid data leakage in our imputation of the test set, we fit the imputation models on the training set.
 The main idea is that the test set should be viewed as several independent observations. Using the test set to impute itself will use information not present at the time of training and will yield unintended correlation.
 
 Mice uses polyreg for the factor variable and predictive mean matching (pmm) for all other.
 
-We can use logreg for BPMeds - since it is binary -, polyreg for education and linear regression for all other columns with missing 
+We use logreg for the binary variable BPMeds, polyreg for education and linear regression for all other missing variables.
 
-We use the package called `mice` @R-mice to imputed the data. Furthermore, since we do not want to use the test data to impute on itself we use the function `mice.reuse` from the package `NADIA` @R-NADIA. 
+We use the package mice (@R-mice) to imputed the data. Furthermore, since we do not want to use the test data to impute on itself we use the function `mice.reuse` from the package NADIA (@R-NADIA). 
 
 ```{r Imputation with mice}
 library(mice) # mice()
@@ -213,7 +199,8 @@ barplot(prop.table(table(d.train.complete$education)), col = c1, xlab = "Categor
 barplot(prop.table(table(d.train.imp$education[is.na(d.train$education)])), col = c2, add = TRUE)
 legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 ```
-
+As can be seen from the density plots, our imputation is mostly yielding imputations around the mean, but without the variance loss of mean imputation. 
+`cigsPerDay` is the only variable not following this principle, it seems. The imputation of `cigsPerDay` seems to be about the mean of nonzero values, which aligns with our previous discussion that the missing values of `cigsPerDay` should be nonzero.  
 
 
 # Model
@@ -241,7 +228,7 @@ y.train.imp = d.train.imp$TenYearCHD
 
 ## Lasso on complete data 
 
-We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package `glmnet` @R-glmnet. 
+We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package glmnet (@R-glmnet). 
 
 ```{r Bootstrap Lasso, echo = T, fig.width=9, fig.height=4.5}
 set.seed(8701)
@@ -280,7 +267,7 @@ mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
                     data = d.test.complete, family = binomial())
 ```
 
-After using lasso on `r B` data sets the variables that have nonzero coefficients in at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
+After using lasso on `r B` data sets the variables that have nonzero coefficients at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients. This can be thought of as single split???? 
 
 The box-plot tell a similar story. Only `age` and `sysBP` has coefficients who's 95\% confidence intervals does not include zero, further supporting their inclusion in the model. From the boxplot we see that the coefficients of `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, maybe justifing their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could choose to lower this to 50\%, which would support the inclusion of `cigsPerDay` and `prevelentHyp`.
 
