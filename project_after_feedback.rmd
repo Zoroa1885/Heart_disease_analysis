@@ -130,6 +130,7 @@ If the data is MAR, then the probability of missing is the same within groups de
 Lastly, if neither MCAR or MAR holds, then the data is MNAR. There is a pattern to the missing data caused by a unknow source. In the case of MNAR, any imputation method would yield a biased results if one used only the data at hand @buuren_flexible_2018.
 
 
+
 ```{r investigate MAR/MCAR}
 # We investigate the response variable for rows that has missing data 
 x = which(colSums(is.na(data)) > 0)
@@ -147,10 +148,24 @@ for (i in 1:length(x)){
 
 M[2,length(x)+1] = round(sum(data$TenYearCHD)/length(data$TenYearCHD),3)
 colnames(M) = c(colnames(data)[colSums(is.na(data)) > 0],"full")
-rownames(M) = c("# miss", "response freq")
+rownames(M) = c("miss", "resp")
 as.table(M)
 ```
 
+```{r further investigate MAR/MCAR}
+d.pos <- subset(data, TenYearCHD == 1)
+d.neg <- subset(data, TenYearCHD == 0)
+na.pos <- colSums(apply(d.pos,2,is.na))
+na.neg <- colSums(apply(d.neg,2,is.na))
+
+M = matrix(NA,nrow = 2, ncol = 16)
+
+M[1,] = round(na.pos/dim(d.pos)[1],3)
+M[2,] = round(na.neg/dim(d.neg)[1],3)
+colnames(M) = colnames(d.pos)
+rownames(M) = c("1", "0")
+M[,x]
+```
 By exploring the missing pattern of for example the variable `cigsPerDay`, we see that our missing mechanism is not MCAR.
 No non-smoker has failed to answer the question ''How may cigarettes do you smoke a day?'', which is a question only aimed at smokers. 
 The simple explanation may be that the survey automatically fills in $0$ for `cigsPerDay` if you claim to be a non-smoker. 
@@ -169,7 +184,7 @@ Mice uses polyreg for the factor variable and predictive mean matching (pmm) for
 
 We can use logreg for BPMeds - since it is binary -, polyreg for education and linear regression for all other columns with missing 
 
-We use the package called mice @R-mice to imputed the data. Furthermore, since we do not want to use the test data to impute on itself we use the function `mice.reuse` from the package NADIA @R-NADIA. 
+We use the package called `mice` @R-mice to imputed the data. Furthermore, since we do not want to use the test data to impute on itself we use the function `mice.reuse` from the package `NADIA` @R-NADIA. 
 
 ```{r Imputation with mice}
 library(mice) # mice()
@@ -226,7 +241,7 @@ y.train.imp = d.train.imp$TenYearCHD
 
 ## Lasso on complete data 
 
-We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package glmnet @R-glmnet. 
+We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package `glmnet` @R-glmnet. 
 
 ```{r Bootstrap Lasso, echo = T, fig.width=9, fig.height=4.5}
 set.seed(8701)
