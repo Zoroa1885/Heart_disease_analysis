@@ -36,7 +36,7 @@ For this project, however, we intend to investigate how to handle missing data i
 
 ## Exploratory Analysis
 
-We start by examining the data set. We use the packages `ggplot2` (@R-ggplot2) and `tidyr` (@R-tidyr) to plot. 
+We start by examining the data set. We use the packages `ggplot2` (@R-ggplot2) and `tidyr` (@R-tidyr) to plot.  
 
 ```{r extra, eval = F, echo = F}
 #data <- read.csv("C:\\Users\\noraa\\Student\\5thYear\\MA8701\\data_analysis_proj\\Heart_disease_analysis\\framingham.csv")
@@ -55,13 +55,14 @@ library(tidyr) # gather()
 # We visualize the data
 ggplot(gather(data), aes(value)) + 
     geom_histogram(bins = 16) + 
-    facet_wrap(~key, scales = 'free_x')
+    facet_wrap(~key, 
+               scales = 'free_x')
 
 # Code education as a factor variable instead of 1-2-3-4.
 data$education = factor(data$education, labels = c("none","hs","college","post-grad"))
 ```
 
-This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, indicating that a natural model choice is a logistic regression model. The response variable has `r pos_response` positive observations, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. We see from the plot that most of our covariates are either binary, or numeric. However, we note that the variable education is most likely a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
+This data set contains `r data_dim[1]` observations, `r data_dim[2]-1` covariates and a binary response variable `TenYearCHD`, indicating that a natural choice is a logistic regression model. The response variable has `r pos_response` positive observations, which equals about `r round(pos_response/data_dim[1]*100,1)`\% of the total observations. We see from the plot that most of our covariates are either binary or numeric. However, we note that the variable `education` most likely is a categorical covariate. We could not find any further elaboration for which four categories the numbers represent, so based on the frequency of each value and qualified guessing, we changed it to a factor variable and defined the four categories as `r names(summary(data$education))[1:4]`.
 
 The next thing we looked at was the number of missing data in our data set. We used the packages `ggmice` (@R-ggmice), `naniar` (@R-naniar), and `gridExtra` (@R-gridExtra) to produce the plots. 
 
@@ -79,9 +80,9 @@ grid.arrange(plot1, plot2, ncol=2)
 ```
 
 
-As we can see there are seven covariates that contains missing data; `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`, where `glucose` is by far the covariate that has the most `NA`'s, with a total of `r round(gluc_miss*100,1)`\% missing values. We cannot use the rows that contain missing values as is. An option for handling the problem would be to remove all rows that contains `NA`'s, also called \textit{complete case analysis}. In this project we use \emph{single imputation}, and compare it with the complete case analysis to investigate how imputing missing data can affect the subsequent inference. 
+As we can see there are seven covariates that contains missing data; `glucose`, `education`, `BPMeds`, `totChol`, `cigsPerDay`, `heartRate`, and `BMI`, where `glucose` is by far the covariate that has the most `NA`'s, with a total of `r round(gluc_miss*100,1)`\% missing values. We cannot use the rows that contain missing values as they are. An option for handling the problem would be to remove all rows that contains `NA`'s, also called \textit{complete case analysis}. In this project we use \emph{single imputation}, and compare it with the complete case analysis to investigate how imputing missing data can affect the subsequent inference. 
 
-Before beginning the imputation we have to split the data into two disjoint sets. We call them training and test set here, but because our goal is inference they will serve more as independent sets where one is used for covariate reduction and the other is used for estimation and inference. The same split is used for both the imputation method and complete method. 
+Before beginning the imputation we have to split the data into two disjoint sets. We call them training and test set, but because our goal is inference, they will serve more as two independent sets where one is used for covariate reduction and the other is used for estimation and inference. The same split is used for both the imputed data and the complete data. 
 
 ```{r train-test split}
 # Split into training and test first to avoid data leakage
@@ -118,7 +119,7 @@ We define the data to be:
   \item Missing not at random (MNAR) if $P(R | Z, \psi) = P(R | Z, \psi)$.
 \end{itemize}
 
-Hence, we need to investigate the missingess in our data before imputing. One thing we do is compare the frequency of missing data depending on the wheter the response variable is 0 or 1. 
+Hence, we need to investigate the missingess in our data before imputing. One thing we do is compare the frequency of missing data depending on whether the response variable is 0 or 1. We report the number of missing values for each variable and their respective frequencies of missingness for positive/negative responses.
 
 ```{r investigate MAR/MCAR, eval = F, echo = F}
 # We investigate the frequency of the response variable for rows that has missing data 
@@ -145,11 +146,13 @@ as.table(M)
 
 
 ```{r further investigate MAR/MCAR}
+# Find number of 0's and 1's and their respective numbers of missing values.
 d.pos <- subset(data, TenYearCHD == 1)
 d.neg <- subset(data, TenYearCHD == 0)
 na.pos <- colSums(apply(d.pos,2,is.na))
 na.neg <- colSums(apply(d.neg,2,is.na))
 
+# Construct a table to compare missingness frequency for positive/negative responses.
 M = matrix(NA,nrow = 3, ncol = 16)
 
 M[1,] = round(colSums(is.na(data)),0)
@@ -162,11 +165,11 @@ M[,which(colSums(is.na(data)) > 0)]
 
 Some of our missing data seem dependent on the response, such as `BMI`, `cigsPerDay`, and `glucose`, and this indicates that we should include the response variable in our imputation model. If the goal was prediction, this is not ideal as we use the response to complete the dataset. However, as our aim is inference, we include the response. 
 
-We now attempt to predict the missing values using the observed data. A better method for handling missing data is called multiple imputation. However, it is not trivial to combine Rubin's rules with the Lasso, bootstrap and concluding inference. It was therefore not considered for this project. 
+We now attempt to predict the missing values using the observed data. A better method for handling missing data is multiple imputation. However, it is not trivial to combine Rubin's rules with the Lasso, bootstrap and the concluding inference. It was therefore not considered for this project. 
 
-When doing single imputation `mice` has as default polynomial regression for the factor variable and predictive mean matching (pmm) for all other. We change to logistic regression for the binary variable `BPMeds`, keep polynomial regression for `education` and use linear regression for all other missing variables. 
+When doing single imputation, the package `mice` (@R-mice) has as default polynomial regression for the factor variable and predictive mean matching (pmm) for all other. We change to logistic regression for the binary variable `BPMeds`, keep polynomial regression for `education` and use linear regression for all other missing variables. 
 
-We use the package called `mice` @R-mice to impute the data. If we wanted to use the test set as normal, we would have to fit the imputation models on the training set, and then reuse these models to impute the test set in order to avoid data leakage. There cannot be correlation in between the samples in the test set when they are used for validation or prediction for instance. This can easily be done using the function `mice.reuse` from the package `NADIA` @R-NADIA. However, since we will use both sets, that we a bit misleadingly called train and test, for model fitting they should be imputed separately with individual models. This is to avoid correlation amongst the data set.  
+If we wanted to use the test set as normal, we would have to fit the imputation models on the training set, and then reuse these models to impute the test set in order to avoid data leakage. Correlation between the samples in the test set when used for validation or prediction, is unwanted. This can easily be done using the function `mice.reuse` from the package `NADIA` (@R-NADIA). However, since we will use both sets for model fitting, altough we (misleadingly) called them train and test, they should be imputed separately with individual models. This is to avoid correlation between the data sets. We also report plots showing the density of imputed values versus the original data. 
 
 
 ```{r Imputation with mice}
@@ -193,15 +196,23 @@ densityplot(imp_mod.test)
 par(mfrow = c(1,2),cex.main = 0.8, cex.lab = 0.8, cex.axis = 0.7)
 c1 <- rgb(173,216,230, max = 255, alpha = 95, names = "lt.blue")
 c2 <- rgb(255,192,203, max = 255, alpha = 95, names = "lt.pink")
-barplot(prop.table(table(d.train.complete$education)), col = c1, xlab = "Category", ylab = "Proportion of total samples", main = "Train Education: \n Observed and Imputed", ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
-barplot(prop.table(table(d.train.imp$education[is.na(d.train$education)])), col = c2, add = TRUE)
+barplot(prop.table(table(d.train.complete$education)), col = c1, xlab = "Category", 
+        ylab = "Proportion of total samples", 
+        main = "Train Education: \n Observed and Imputed", 
+        ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
+barplot(prop.table(table(d.train.imp$education[is.na(d.train$education)])), 
+        col = c2, add = TRUE)
 legend("topright", legend=c("Complete", "Imputed"), cex=1, pch=15,col=c(c1,c2))
 
-barplot(prop.table(table(d.test.complete$education)), col = c1, xlab = "Category", ylab = "Proportion of total samples", main = "Test Education: \n Observed and Imputed", ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
-barplot(prop.table(table(d.test.imp$education[is.na(d.train$education)])), col = c2, add = TRUE)
+barplot(prop.table(table(d.test.complete$education)), col = c1, xlab = "Category", 
+        ylab = "Proportion of total samples", 
+        main = "Test Education: \n Observed and Imputed", 
+        ylim = c(0,0.6)) # Plot 1st histogram using a transparent color
+barplot(prop.table(table(d.test.imp$education[is.na(d.train$education)])), 
+        col = c2, add = TRUE)
 legend("topright", legend=c("Complete", "Imputed"), cex = 1, pch=15,col=c(c1,c2))
 ```
-As can be seen from the density plots, our imputation is mostly yielding imputations around the mean, but with some added variance. Both sets have some deviance from the observed proportions when it comes to imputation of the categorical variable `education`, which are unsure how to explain. Furthermore, although the imputation of `cigsPerDay` may appear strange, it makes sense as all missing observations in that variable also had responded positive to `currentSmoker`. The imputation of `cigsPerDay` seems to be about the mean of non-zero values, thus showcasing a similar behavior as the other imputed data.  
+As can be seen from the density plots, our imputation is mostly yielding imputations around the mean, but with some added variance. Both sets have some deviance from the observed proportions when it comes to imputation of the categorical variable `education`, which we are unsure how to explain. Furthermore, although the imputation of `cigsPerDay` may appear strange, it makes sense as all missing observations in that variable also had responded positive to `currentSmoker`. The imputation of `cigsPerDay` seems to be about the mean of non-zero values, thus showcasing a similar behavior as the other imputed data.  
 
 
 # Model
@@ -219,8 +230,7 @@ train.complete.sd = attr(x.train.complete, "scaled:scale")
 y.train.complete = d.train.complete$TenYearCHD
 
 x.train.imp = scale(model.matrix(TenYearCHD ~ . -1,
-                                 data = d.train.imp, 
-                                 family = binomial()))
+                                 data = d.train.imp, family = binomial()))
 train.imp.mean = attr(x.train.imp, "scaled:center")
 train.imp.sd = attr(x.train.imp, "scaled:scale")
 y.train.imp = d.train.imp$TenYearCHD
@@ -229,7 +239,7 @@ y.train.imp = d.train.imp$TenYearCHD
 
 ## Lasso on complete data 
 
-We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package `glmnet` @R-glmnet. 
+We continue to do the Lasso on the complete case data. This is done by first estimating $\lambda_{min}$ using cross-validation and then fitting a Lasso model with the highest $\lambda$ within one standard deviation of $\lambda_{min}$ as penalty term. For easy implementation of the lasso method, we use the package `glmnet` (@R-glmnet). This is combined with bootstrapping to see which covariates are most often included in the selection process.
 
 ```{r Bootstrap Complete}
 library(glmnet) # implementing lasso
@@ -255,14 +265,18 @@ for (i in 1:B){
 
 colnames(B.coef.complete) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
 B.coef.count.complete = ifelse(B.coef.complete == 0,0,1)
-coef70.complete <- names(apply(B.coef.count.complete, 2, sum)/B)[apply(B.coef.count.complete, 2, sum)/B > 0.7]
+coef70.complete <- names(apply(B.coef.count.complete, 
+                               2, sum)/B)[apply(B.coef.count.complete, 2, sum)/B > 0.7]
 
-# We do not include intercept as it is always in the model and too large to fit in the scaling.
+# We do not include intercept as it is always in the model 
+# and too large to fit in the scaling.
 par(mfrow = c(1,2))
 boxplot.matrix(B.coef.complete[,-1], ylim = c(-0.25,0.55),
-               las = 2, main = "Boxplot of estimated coefficients")
+               las = 2, 
+               main = "Boxplot of estimated coefficients")
 barplot(apply(B.coef.count.complete, 2, sum)/B,
-        las = 2, main = "Percentage of times coefficient was nonzero")
+        las = 2, 
+        main = "Percentage of times coefficient was nonzero")
 abline(h=0.7,col="red", lty=2, lwd=3)
 
 # Fit a logistic model using the test data and chosen covariates
@@ -270,9 +284,9 @@ mod.complete <- glm(TenYearCHD ~ age + male + sysBP + glucose,
                     data = d.test.complete, family = binomial())
 ```
 
-After using lasso on `r B` data sets the variables that have nonzero coefficients at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. This cut-off values seems reasonable, but could be altered to include more or fewer coefficients if wanted, as it was chosen a bit arbitrarily. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients.
+After using Lasso on `r B` data sets, the variables that have nonzero coefficients at least 70\% of the time, are `r coef70.complete`. They are also indicated on the right figure above. This cut-off value seems reasonable, but could be altered to include more or fewer coefficients if wanted, as it was chosen a bit arbitrarily. We use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent test data to estimate the coefficients in the logistic model.
 
-We could also investigated the box-plot to determine the covariates that we would like in our model. Here, both `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile range, which perhaps justifies their exclusion from the final model. However, zero is also included in the inter-quartile range to the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could perhaps use both plots in combination to determine the most significant covariates. 
+We could also investigated the box-plot to determine the covariates that we would like in our model. Both `cigsPerDay` and `prevelentHyp` has coefficients estimated to be non-zero, although zero is included in their inter-quartile ranges, which perhaps justifies excluding them from the final model. However, zero is also included in the inter-quartile range of the coefficient of `glucose`, which is included in the final model. Since the choice of a 70\% cutoff range is somewhat arbitrary, one could perhaps use both plots in combination to determine the most significant covariates. 
 
 ## Lasso on imputed data
 
@@ -289,7 +303,8 @@ for (i in 1:B){
   x = x.train.imp[B.data,]
   y = y.train.imp[B.data]
   cv.out = cv.glmnet(x, y, family = "binomial", alpha = 1)
-  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, intercept = T, lasso = cv.out$lambda.1se)
+  lasso_mod = glmnet(x, y, family = "binomial", alpha = 1, 
+                     intercept = T, lasso = cv.out$lambda.1se)
   
   B.coef.imp[i,] <- coef(lasso_mod,s=cv.out$lambda.1se)[,1]
 }
@@ -299,19 +314,24 @@ for (i in 1:B){
 
 colnames(B.coef.imp) = names(coef(lasso_mod,s=cv.out$lambda.1se)[,1])
 B.coef.count.imp = ifelse(B.coef.imp == 0,0,1)
-coef70.imp <- names(apply(B.coef.count.imp, 2, sum)/B)[apply(B.coef.count.imp, 2, sum)/B > 0.7]
+coef70.imp <- names(apply(B.coef.count.imp, 
+                          2, sum)/B)[apply(B.coef.count.imp, 2, sum)/B > 0.7]
 
-# We do not include intercept as it is always in the model and too large to fit in the scaling.
+# We do not include intercept as it is always in the model 
+# and too large to fit in the scaling.
 par(mfrow = c(1,2))
-boxplot.matrix(B.coef.imp[,-1], ylim = c(-0.25,0.55), las = 2, main = "Boxplot of estimated coefficients")
-barplot(apply(B.coef.count.imp, 2, sum)/B, las = 2, main = "Percentage of times coefficient was nonzero")
+boxplot.matrix(B.coef.imp[,-1], ylim = c(-0.25,0.55), las = 2, 
+               main = "Boxplot of estimated coefficients")
+barplot(apply(B.coef.count.imp, 2, sum)/B, las = 2, 
+        main = "Percentage of times coefficient was nonzero")
 abline(h=0.7,col="red", lty=2, lwd=3)
 
 # Fit a logistic model using the test data and chosen covariates
-mod.imp <- glm(TenYearCHD ~ age + male + sysBP + glucose + cigsPerDay, data = d.test.imp, family = binomial())
+mod.imp <- glm(TenYearCHD ~ age + male + sysBP + glucose + cigsPerDay, 
+               data = d.test.imp, family = binomial())
 ```
 
-The Lasso on the imputed data chooses `r coef70.imp`as the non-zero covariates, here also indicated in the right plot above. The performance of this model is quite similar to that of the complete case, but we note in particular that `cigsPerDay`, `BPMeds` and `glucose` are non-zero more often when using the imputed data. This could perhaps be a sign of correlation in the training data caused by the imputation. As before, we use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent imputed test data to estimate the coefficients. Here we see why it was important to impute the test set using itself, and not the imputation model trained on the training data. However, in a regular train/test situation where the test set is indeed used for testing or validation it is important to reuse the imputation model fitted on the training data, as discussed previously. 
+The Lasso on the imputed data chooses `r coef70.imp`as the non-zero covariates, indicated in the right plot above. The performance of this model is quite similar to that of the complete case, but we note in particular that `cigsPerDay`, `BPMeds` and `glucose` are non-zero more often when using the imputed data. This could perhaps be a sign of correlation in the training data caused by the imputation. As before, we use the chosen covariates to fit a logistic regression model. To avoid overfitting, we use the independent (imputed) test data to estimate the coefficients. This explains why it was important to impute the test set using itself, and not the imputation model trained on the training data. However, in a regular train/test situation where the test set is indeed used for testing or validation, it is important to reuse the imputation model fitted on the training data, as discussed earlier. 
 
 # Inference
 
@@ -319,8 +339,8 @@ To access the two models we compute the AIC and look at the confidence intervals
 
 
 ```{r complete case comparison}
-data.frame("Complete"=round(summary(mod.complete)$aic,2),
-      "Imputed" = round(summary(mod.imp)$aic,2))
+data.frame("Complete"=round(summary(mod.complete)$aic,2), 
+           "Imputed" = round(summary(mod.imp)$aic,2))
 
 summary(mod.complete)
 summary(mod.imp)
@@ -329,26 +349,30 @@ confint(mod.complete)
 confint(mod.imp)
 ```
 
-To account for the cherry picking in variables Lasso causes, we may calculate stricter p-values by multiplying them by the number of covariates chosen for the final model (@Dezeure2015).
+To account for the cherry-picking of variables that the Lasso causes, we may calculate stricter p-values by multiplying them by the number of covariates chosen for the final model (@Dezeure2015).
 
 ```{r strict p-values}
 summary(mod.complete)$coefficients[,4] * length(summary(mod.complete)$coefficients[,4])
 summary(mod.imp)$coefficients[,4] * length(summary(mod.imp)$coefficients[,4])
 ```
 
-All coefficients continue to be significant after the adjustment for the complete model, although `glucose` are only barely so. For the imputed dataset, only `male` are no longer significant after the adjustment. This is a somewhat surprising result, since `male` where almost always included by the Lasso. Perhaps the absence of `cigsPerDay` and the high correlation between this covariate and `male`, which is `r round(cor(d.complete$male, d.complete$cigsPerDay),3)` weighted `male` as more significant covarite than what is true. 
+All coefficients continue to be significant after the adjustment for the complete model, although `glucose` is only barely so. For the imputed dataset, only `male` fails to be significant after the adjustment. This is a somewhat surprising result, since `male` where almost always included by the Lasso. Perhaps the absence of `cigsPerDay` and the high correlation between this covariate and `male`, which is `r round(cor(d.complete$male, d.complete$cigsPerDay),3)`, weighted `male` as more significant covariate than it should have been. 
 
-We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so for curiosity we check also a model fitted using the imputed test set, but with the same covariates as chosen by the complete data.
+We see that the AIC evaluates the model fitted on imputed data to be worse. This could be penalty for adding an  extra coefficient in our model, so out of curiosity we compare with a model fitted using the imputed test set, but with the same covariates as chosen by the Lasso on the complete data.
 
 ```{r alternative model, eval = T, echo = T}
-# Check the AIC when using the same covariates? 
-mod.imp2 = glm(TenYearCHD ~ age + male + sysBP + glucose, data = d.test.imp, family = binomial())
+# Check the AIC when using the same covariates 
+mod.imp2 = glm(TenYearCHD ~ age + male + sysBP + glucose, 
+               data = d.test.imp, family = binomial())
 summary(mod.imp2)
 confint(mod.imp2)
+
+# Compare the AIC for each model
 data.frame("Complete"=round(summary(mod.complete)$aic,2),
       "Imputed" = round(summary(mod.imp)$aic,2),
       "Alternative imputed" = round(summary(mod.imp2)$aic,2))
 
+# Computing the width of the confidence intervals for each variable in each model.
 CI.mat = matrix(NA, nrow = 3, ncol = 6) 
 CI.mat[1,] = c(round(confint(mod.complete)[,1]-confint(mod.complete)[,2],2),NA)
 CI.mat[2,] = c(round(confint(mod.imp)[,1]-confint(mod.imp)[,2],2))
@@ -358,15 +382,15 @@ rownames(CI.mat) = c("Complete", "Imputed", "Alternative Imputed")
 abs(CI.mat)
 ```
 
-There is almost no change in AIC between the two models used on the imputed data set, indicating that it is the imputation, despite increasing the size of the data, which causes the AIC to evaluate this model as worse. However, from the table above, which shows the width of the 95\% confidence interval for the estimated coefficients, we note that the confidence intervals are slightly smaller for the imputed models. This is likely only due to the fact that the imputed data set is larger, and also that none of our imputed values deviated much from the mean. Therefore, the smaller confidence intervals do not necessarily imply that these are more precise estimates of the true coefficients. 
+There is almost no change in AIC between the two models used on the imputed data set, indicating that it is the imputation procedure that causes the AIC to evaluate this model as worse, despite increasing the size of the data. However, from the table above, which shows the width of the 95\% confidence interval for the estimated coefficients, we note that the confidence intervals are slightly smaller for the imputed models. This is likely only due to the fact that the imputed data set is larger, and that few of our imputed values deviated much from the mean. Therefore, the smaller confidence intervals do not necessarily imply that these are more precise estimates of the true coefficients. 
 
 
 # Discussion
 
 
-When we compare the chosen coefficients from the complete case data compared to the imputed data, we see that they correspond. Thus, in a data-rich situation imputation may only introduce unnecessary variance, without having an immediate effect on the quality of the model or inference. This was exemplified in the bootstrap estimates of the lasso regression on imputed data, where covariates where deemed more significant after imputing than before. 
+When we compare the coefficients chosen by the Lasso on the complete case data and the imputed data, we see that they correspond. Thus, in a data-rich situation, imputation may end up only contributing to an unnecessary change in the variance, without having an immediate effect on the quality of the model or the inference. This was exemplified in the bootstrap estimates of the lasso regression on imputed data, where covariates where deemed more significant after imputing than before. 
 
-Furthermore, the problem with data leakage, both between independent sets used for fitting models, training and test sets used for fitting and validation, and within a single observation for instance between response and covariates, makes imputation vulnerable for unintended inaccuracies. We also did not use ROC-AUC to evaluate the model as both train and test data had been used to fit the final model. Hence, a third, independent subset would have been needed in order to run ROC-AUC calculations. 
+Furthermore, the problem with data leakage, both between independent sets used for fitting models, training and test sets used for fitting and validation, and within a single observation for instance between response and covariates, makes imputation vulnerable for unintended inaccuracies. Note that we did not use ROC-AUC to evaluate the models, as both the training and test data had been used to fit the final model. Hence, a third, independent subset would have been needed in order to run ROC-AUC calculations. 
 
 
 # References 
